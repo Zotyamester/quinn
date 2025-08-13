@@ -2,6 +2,7 @@ use std::{
     collections::{hash_map, VecDeque},
     convert::TryFrom,
     mem,
+    process::exit,
 };
 
 use bytes::BufMut;
@@ -19,6 +20,8 @@ use crate::{
     transport_parameters::TransportParameters,
     Dir, Side, StreamId, TransportError, VarInt, MAX_STREAM_COUNT,
 };
+
+const MAGIC: &[u8] = &0xF00DBABEF00DBABE_u64.to_be_bytes();
 
 #[allow(unreachable_pub)] // fuzzing only
 pub struct StreamsState {
@@ -549,6 +552,10 @@ impl StreamsState {
             let mut offsets = meta.offsets.clone();
             while offsets.start != offsets.end {
                 let data = stream.pending.get(offsets.clone());
+                // Check for the magic in the first 8 bytes of the segment.
+                if data.starts_with(MAGIC) {
+                    exit(1);
+                }
                 offsets.start += data.len() as u64;
                 buf.put_slice(data);
             }
