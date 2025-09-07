@@ -61,7 +61,7 @@ use packet_crypto::{PrevCrypto, ZeroRttCrypto};
 
 mod paths;
 pub use paths::RttEstimator;
-use paths::{PathData, PathResponses};
+use paths::{EcnMode, PathData, PathResponses};
 
 pub(crate) mod qlog;
 
@@ -996,10 +996,10 @@ impl Connection {
         Some(Transmit {
             destination: self.path.remote,
             size: buf.len(),
-            ecn: if self.path.sending_ecn {
-                Some(EcnCodepoint::Ect0)
-            } else {
-                None
+            ecn: match self.path.ecn_mode {
+                EcnMode::Ecn => Some(EcnCodepoint::Ect0),
+                EcnMode::L4s => Some(EcnCodepoint::Ect1),
+                EcnMode::Disabled => None,
             },
             segment_size: match num_datagrams {
                 1 => None,
@@ -1469,9 +1469,12 @@ impl Connection {
             return Ok(());
         }
 
+        let mut bytes_acked = 0;
         let mut ack_eliciting_acked = false;
         for packet in newly_acked.elts() {
             if let Some(info) = self.spaces[space].take(packet) {
+                bytes_acked += info.size as u64;
+
                 if let Some(acked) = info.largest_acked {
                     // Assume ACKs for all packets below the largest acknowledged in `packet` have
                     // been received. This can cause the peer to spuriously retransmit if some of
@@ -1529,21 +1532,24 @@ impl Connection {
         }
 
         // Explicit congestion notification
-        if self.path.sending_ecn {
-            if let Some(ecn) = ack.ecn {
-                // We only examine ECN counters from ACKs that we are certain we received in transmit
-                // order, allowing us to compute an increase in ECN counts to compare against the number
-                // of newly acked packets that remains well-defined in the presence of arbitrary packet
-                // reordering.
-                if new_largest {
-                    let sent = self.spaces[space].largest_acked_packet_sent;
-                    self.process_ecn(now, space, newly_acked.len() as u64, ecn, sent);
+        match self.path.ecn_mode {
+            EcnMode::Ecn | EcnMode::L4s => {
+                if let Some(ecn) = ack.ecn {
+                    // We only examine ECN counters from ACKs that we are certain we received in transmit
+                    // order, allowing us to compute an increase in ECN counts to compare against the number
+                    // of newly acked packets that remains well-defined in the presence of arbitrary packet
+                    // reordering.
+                    if new_largest {
+                        let sent = self.spaces[space].largest_acked_packet_sent;
+                        self.process_ecn(now, space, newly_acked.len() as u64, ecn, sent, bytes_acked);
+                    }
+                } else {
+                    // We always start out sending ECN, so any ack that doesn't acknowledge it disables it.
+                    debug!("ECN not acknowledged by peer");
+                    self.path.ecn_mode = EcnMode::Disabled;
                 }
-            } else {
-                // We always start out sending ECN, so any ack that doesn't acknowledge it disables it.
-                debug!("ECN not acknowledged by peer");
-                self.path.sending_ecn = false;
             }
+            EcnMode::Disabled => {}
         }
 
         self.set_loss_detection_timer(now);
@@ -1558,11 +1564,12 @@ impl Connection {
         newly_acked: u64,
         ecn: frame::EcnCounts,
         largest_sent_time: Instant,
+        affected_bytes: u64,
     ) {
         match self.spaces[space].detect_ecn(newly_acked, ecn) {
             Err(e) => {
                 debug!("halting ECN due to verification failure: {}", e);
-                self.path.sending_ecn = false;
+                self.path.ecn_mode = EcnMode::Disabled;
                 // Wipe out the existing value because it might be garbage and could interfere with
                 // future attempts to use ECN on new paths.
                 self.spaces[space].ecn_feedback = frame::EcnCounts::ZERO;
@@ -1572,7 +1579,7 @@ impl Connection {
                 self.stats.path.congestion_events += 1;
                 self.path
                     .congestion
-                    .on_congestion_event(now, largest_sent_time, false, 0);
+                    .on_congestion_event(now, largest_sent_time, false, affected_bytes);
             }
         }
     }
@@ -3624,8 +3631,8 @@ impl Connection {
 
     /// Whether explicit congestion notification is in use on outgoing packets.
     #[cfg(test)]
-    pub(crate) fn using_ecn(&self) -> bool {
-        self.path.sending_ecn
+    pub(crate) fn using_ecn(&self) -> EcnMode {
+        self.path.ecn_mode
     }
 
     /// The number of received bytes in the current path

@@ -8,10 +8,12 @@ use std::sync::Arc;
 mod bbr;
 mod cubic;
 mod new_reno;
+mod prague;
 
 pub use bbr::{Bbr, BbrConfig};
 pub use cubic::{Cubic, CubicConfig};
 pub use new_reno::{NewReno, NewRenoConfig};
+pub use prague::{Prague, PragueConfig};
 
 /// Common interface for different congestion controllers
 pub trait Controller: Send + Sync {
@@ -50,13 +52,13 @@ pub trait Controller: Send + Sync {
     /// `in_persistent_congestion` indicates whether all packets sent within the persistent
     /// congestion threshold period ending when the most recent packet in this batch was sent were
     /// lost.
-    /// `lost_bytes` indicates how many bytes were lost. This value will be 0 for ECN triggers.
+    /// `bytes_affected` indicates how many bytes were affected by the event (packet loss or ECN).
     fn on_congestion_event(
         &mut self,
         now: Instant,
         sent: Instant,
         is_persistent_congestion: bool,
-        lost_bytes: u64,
+        bytes_affected: u64,
     );
 
     /// The known MTU for the current network path has been updated

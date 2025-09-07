@@ -167,7 +167,7 @@ impl Controller for Cubic {
         now: Instant,
         sent: Instant,
         is_persistent_congestion: bool,
-        _lost_bytes: u64,
+        _bytes_affected: u64,
     ) {
         if self
             .recovery_start_time

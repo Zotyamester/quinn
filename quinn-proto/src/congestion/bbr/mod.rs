@@ -465,9 +465,9 @@ impl Controller for Bbr {
         _now: Instant,
         _sent: Instant,
         _is_persistent_congestion: bool,
-        lost_bytes: u64,
+        bytes_affected: u64,
     ) {
-        self.loss_state.lost_bytes += lost_bytes;
+        self.loss_state.lost_bytes += bytes_affected;
     }
 
     fn on_mtu_update(&mut self, new_mtu: u16) {

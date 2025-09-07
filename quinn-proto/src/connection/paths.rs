@@ -12,12 +12,19 @@ use crate::{Duration, Instant, TIMER_GRANULARITY, TransportConfig, congestion, p
 #[cfg(feature = "qlog")]
 use qlog::events::quic::MetricsUpdated;
 
+#[derive(Clone, Copy)]
+pub(super) enum EcnMode {
+    Disabled,
+    Ecn,
+    L4s,
+}
+
 /// Description of a particular network path
 pub(super) struct PathData {
     pub(super) remote: SocketAddr,
     pub(super) rtt: RttEstimator,
     /// Whether we're enabling ECN on outgoing packets
-    pub(super) sending_ecn: bool,
+    pub(super) ecn_mode: EcnMode,
     /// Congestion controller state
     pub(super) congestion: Box<dyn congestion::Controller>,
     /// Pacing state
@@ -70,7 +77,7 @@ impl PathData {
         Self {
             remote,
             rtt: RttEstimator::new(config.initial_rtt),
-            sending_ecn: true,
+            ecn_mode: EcnMode::L4s,
             pacing: Pacer::new(
                 config.initial_rtt,
                 congestion.initial_window(),
@@ -119,7 +126,7 @@ impl PathData {
             remote,
             rtt: prev.rtt,
             pacing: Pacer::new(smoothed_rtt, congestion.window(), prev.current_mtu(), now),
-            sending_ecn: true,
+            ecn_mode: EcnMode::L4s,
             congestion,
             challenge: None,
             challenge_pending: false,

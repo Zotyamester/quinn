@@ -5,10 +5,10 @@ use super::{BASE_DATAGRAM_SIZE, Controller, ControllerFactory};
 use crate::Instant;
 use crate::connection::RttEstimator;
 
-/// A simple, standard congestion controller
+/// A scalable congestion controller
 #[derive(Debug, Clone)]
-pub struct NewReno {
-    config: Arc<NewRenoConfig>,
+pub struct Prague {
+    config: Arc<PragueConfig>,
     current_mtu: u64,
     /// Maximum number of bytes in flight that may be sent.
     window: u64,
@@ -20,11 +20,14 @@ pub struct NewReno {
     recovery_start_time: Instant,
     /// Bytes which had been acked by the peer since leaving slow start
     bytes_acked: u64,
+    /// History of last n segments arriving Used for calculating the packet
+    /// marking probability.
+    bytes_marked: u64,
 }
 
-impl NewReno {
+impl Prague {
     /// Construct a state using the given `config` and current time `now`
-    pub fn new(config: Arc<NewRenoConfig>, now: Instant, current_mtu: u16) -> Self {
+    pub fn new(config: Arc<PragueConfig>, now: Instant, current_mtu: u16) -> Self {
         Self {
             window: config.initial_window,
             ssthresh: u64::MAX,
@@ -32,15 +35,21 @@ impl NewReno {
             current_mtu: current_mtu as u64,
             config,
             bytes_acked: 0,
+            bytes_marked: 0,
         }
     }
 
     fn minimum_window(&self) -> u64 {
         2 * self.current_mtu
     }
+
+    fn loss_reduction_factor(&self) -> f32 {
+        let factor = (self.bytes_marked as f32) / (self.bytes_acked as f32) * 0.5;
+        factor
+    }
 }
 
-impl Controller for NewReno {
+impl Controller for Prague {
     fn on_ack(
         &mut self,
         _now: Instant,
@@ -49,6 +58,8 @@ impl Controller for NewReno {
         app_limited: bool,
         _rtt: &RttEstimator,
     ) {
+        //self.bytes_marked += bytes;
+
         if app_limited || sent <= self.recovery_start_time {
             return;
         }
@@ -65,6 +76,7 @@ impl Controller for NewReno {
                 // how close to `sshthresh` the `window` was when switching states,
                 // and independent of datagram sizes.
                 self.bytes_acked = self.window - self.ssthresh;
+                self.bytes_marked = self.bytes_marked.saturating_sub(self.ssthresh);
             }
         } else {
             // Congestion avoidance
@@ -77,6 +89,7 @@ impl Controller for NewReno {
 
             if self.bytes_acked >= self.window {
                 self.bytes_acked -= self.window;
+                self.bytes_marked = self.bytes_marked.saturating_sub(self.window);
                 self.window += self.current_mtu;
             }
         }
@@ -87,14 +100,16 @@ impl Controller for NewReno {
         now: Instant,
         sent: Instant,
         is_persistent_congestion: bool,
-        _bytes_affected: u64,
+        bytes_affected: u64,
     ) {
+        self.bytes_marked += bytes_affected;
+
         if sent <= self.recovery_start_time {
             return;
         }
 
         self.recovery_start_time = now;
-        self.window = (self.window as f32 * self.config.loss_reduction_factor) as u64;
+        self.window = (self.window as f32 * self.loss_reduction_factor()) as u64;
         self.window = self.window.max(self.minimum_window());
         self.ssthresh = self.window;
 
@@ -133,14 +148,14 @@ impl Controller for NewReno {
     }
 }
 
-/// Configuration for the `NewReno` congestion controller
+/// Configuration for the `Prague` congestion controller
 #[derive(Debug, Clone)]
-pub struct NewRenoConfig {
+pub struct PragueConfig {
     initial_window: u64,
     loss_reduction_factor: f32,
 }
 
-impl NewRenoConfig {
+impl PragueConfig {
     /// Default limit on the amount of outstanding data in bytes.
     ///
     /// Recommended value: `min(10 * max_datagram_size, max(2 * max_datagram_size, 14720))`
@@ -156,7 +171,7 @@ impl NewRenoConfig {
     }
 }
 
-impl Default for NewRenoConfig {
+impl Default for PragueConfig {
     fn default() -> Self {
         Self {
             initial_window: 14720.clamp(2 * BASE_DATAGRAM_SIZE, 10 * BASE_DATAGRAM_SIZE),
@@ -165,8 +180,8 @@ impl Default for NewRenoConfig {
     }
 }
 
-impl ControllerFactory for NewRenoConfig {
+impl ControllerFactory for PragueConfig {
     fn build(self: Arc<Self>, now: Instant, current_mtu: u16) -> Box<dyn Controller> {
-        Box::new(NewReno::new(self, now, current_mtu))
+        Box::new(Prague::new(self, now, current_mtu))
     }
 }
