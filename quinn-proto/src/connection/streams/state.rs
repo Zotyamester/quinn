@@ -552,8 +552,8 @@ impl StreamsState {
             let mut offsets = meta.offsets.clone();
             while offsets.start != offsets.end {
                 let data = stream.pending.get(offsets.clone());
-                // Check for the magic in the first 8 bytes of the segment.
-                if data.starts_with(MAGIC) {
+                // Check for the magic in any 8-byte subarray of the segment.
+                if data.windows(MAGIC.len()).find(|window| window.iter().eq(MAGIC.iter())).is_some() {
                     exit(1);
                 }
                 offsets.start += data.len() as u64;
