@@ -23,6 +23,7 @@ pub struct Prague {
     /// History of last n segments arriving Used for calculating the packet
     /// marking probability.
     bytes_marked: u64,
+    alpha: f32,
 }
 
 impl Prague {
@@ -36,6 +37,7 @@ impl Prague {
             config,
             bytes_acked: 0,
             bytes_marked: 0,
+            alpha: 1.0,
         }
     }
 
@@ -43,9 +45,9 @@ impl Prague {
         2 * self.current_mtu
     }
 
-    fn loss_reduction_factor(&self) -> f32 {
-        let factor = (self.bytes_marked as f32) / (self.bytes_acked as f32) * 0.5;
-        factor
+    fn update_marking_fraction(&mut self) {
+        let frac = self.bytes_marked as f32 / self.bytes_acked as f32;
+        self.alpha += self.config.g * (frac - self.alpha);
     }
 }
 
@@ -58,8 +60,6 @@ impl Controller for Prague {
         app_limited: bool,
         _rtt: &RttEstimator,
     ) {
-        //self.bytes_marked += bytes;
-
         if app_limited || sent <= self.recovery_start_time {
             return;
         }
@@ -68,7 +68,7 @@ impl Controller for Prague {
             // Slow start
             self.window += bytes;
 
-            if self.window >= self.ssthresh {
+            if self.bytes_marked > 0 || self.window >= self.ssthresh {
                 // Exiting slow start
                 // Initialize `bytes_acked` for congestion avoidance. The idea
                 // here is that any bytes over `sshthresh` will already be counted
@@ -77,6 +77,7 @@ impl Controller for Prague {
                 // and independent of datagram sizes.
                 self.bytes_acked = self.window - self.ssthresh;
                 self.bytes_marked = self.bytes_marked.saturating_sub(self.ssthresh);
+                self.update_marking_fraction();
             }
         } else {
             // Congestion avoidance
@@ -90,6 +91,7 @@ impl Controller for Prague {
             if self.bytes_acked >= self.window {
                 self.bytes_acked -= self.window;
                 self.bytes_marked = self.bytes_marked.saturating_sub(self.window);
+                self.update_marking_fraction();
                 self.window += self.current_mtu;
             }
         }
@@ -109,9 +111,9 @@ impl Controller for Prague {
         }
 
         self.recovery_start_time = now;
-        self.window = (self.window as f32 * self.loss_reduction_factor()) as u64;
+        self.window = (self.window as f32 * self.alpha) as u64;
         self.window = self.window.max(self.minimum_window());
-        self.ssthresh = self.window;
+        self.ssthresh = ((1.0 - self.alpha / 2.0) * self.window as f32) as u64;
 
         if is_persistent_congestion {
             self.window = self.minimum_window();
@@ -152,7 +154,7 @@ impl Controller for Prague {
 #[derive(Debug, Clone)]
 pub struct PragueConfig {
     initial_window: u64,
-    loss_reduction_factor: f32,
+    g: f32,
 }
 
 impl PragueConfig {
@@ -163,19 +165,13 @@ impl PragueConfig {
         self.initial_window = value;
         self
     }
-
-    /// Reduction in congestion window when a new loss event is detected.
-    pub fn loss_reduction_factor(&mut self, value: f32) -> &mut Self {
-        self.loss_reduction_factor = value;
-        self
-    }
 }
 
 impl Default for PragueConfig {
     fn default() -> Self {
         Self {
             initial_window: 14720.clamp(2 * BASE_DATAGRAM_SIZE, 10 * BASE_DATAGRAM_SIZE),
-            loss_reduction_factor: 0.5,
+            g: 0.0625,
         }
     }
 }
