@@ -11,6 +11,7 @@ use quinn::{
     congestion::{self, ControllerFactory},
     udp::UdpSocketState,
 };
+use quinn_proto::EcnMode;
 use rustls::crypto::ring::cipher_suite;
 use socket2::{Domain, Protocol, Socket, Type};
 use tracing::warn;
@@ -56,12 +57,12 @@ pub struct CommonOpt {
     /// Ack Frequency mode
     #[clap(long = "ack-frequency")]
     pub ack_frequency: bool,
-    /// Enable the use of ECN administratively
+    /// Configure the use of ECN administratively
     ///
     /// Note, that this does not guarantee that if ECN will actually be used as it is dependent
     /// on whether the path and the peer support it.
-    #[clap(long = "enable-ecn")]
-    pub enable_ecn: bool,
+    #[clap(long = "ecn", default_value = "classic")]
+    pub ecn: Ecn,
     /// Congestion algorithm to use
     #[clap(long = "congestion")]
     pub cong_alg: Option<CongestionAlgorithm>,
@@ -128,7 +129,7 @@ impl CommonOpt {
             transport.send_window(send_window);
         }
 
-        transport.enable_ecn(self.enable_ecn);
+        transport.enable_ecn(self.ecn.into());
 
         #[cfg(feature = "qlog")]
         if let Some(qlog_file) = &self.qlog_file {
@@ -203,6 +204,26 @@ pub fn parse_byte_size(s: &str) -> Result<u64, ParseIntError> {
     };
 
     Ok(u64::from_str(s)? * multiplier)
+}
+
+// TODO: it doesn't feel nice to do such a boilerplate mess, especially considering how simple this
+// enum is, but at the same time I felt like adding a trait from clap to a library crate would have
+// been unwise (see separation of concerns)
+#[derive(Clone, Copy, ValueEnum)]
+pub enum Ecn {
+    Disabled,
+    Classic,
+    L4S,
+}
+
+impl Into<EcnMode> for Ecn {
+    fn into(self) -> EcnMode {
+        match self {
+            Ecn::Disabled => EcnMode::Disabled,
+            Ecn::Classic => EcnMode::Classic,
+            Ecn::L4S => EcnMode::L4S,
+        }
+    }
 }
 
 #[derive(Clone, Copy, ValueEnum)]

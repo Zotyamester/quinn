@@ -998,7 +998,7 @@ impl Connection {
             destination: self.path.remote,
             size: buf.len(),
             ecn: if self.path.using_ecn {
-                Some(EcnCodepoint::Ect0) // TODO: add option to use the ECT(1) codepoint
+                self.path.ecn_mode.codepoint()
             } else {
                 None
             },
@@ -1547,9 +1547,9 @@ impl Connection {
                 // We always start out sending ECN, so any ack that doesn't acknowledge it disables it.
                 debug!("ECN not acknowledged by peer");
                 self.path.using_ecn = false; // NOTE: negotation may not be completely necessary,
-                                               // since this and another check essentially disables
-                                               // the use of ECN in case there's no ECN-echoing or
-                                               // if the echoing peer is faulty
+                                             // since this and another check essentially disables
+                                             // the use of ECN in case there's no ECN-echoing or
+                                             // if the echoing peer is faulty
             }
         }
 
@@ -3685,7 +3685,7 @@ impl Connection {
     /// Whether explicit congestion notification is in use on outgoing packets.
     #[cfg(test)]
     pub(crate) fn using_ecn(&self) -> bool {
-        self.path.using_ecn // TODO: affected by future L4S-related changes
+        self.path.using_ecn
     }
 
     /// The number of received bytes in the current path

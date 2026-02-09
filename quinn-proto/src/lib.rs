@@ -59,7 +59,7 @@ mod config;
 #[cfg(feature = "qlog")]
 pub use config::QlogConfig;
 pub use config::{
-    AckFrequencyConfig, ClientConfig, ConfigError, EndpointConfig, IdleTimeout, MtuDiscoveryConfig,
+    AckFrequencyConfig, ClientConfig, ConfigError, EcnMode, EndpointConfig, IdleTimeout, MtuDiscoveryConfig,
     ServerConfig, StdSystemTime, TimeSource, TransportConfig, ValidationTokenConfig,
 };
 
