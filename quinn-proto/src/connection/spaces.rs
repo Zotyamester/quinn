@@ -196,7 +196,9 @@ impl PacketSpace {
         if total_increase < newly_acked {
             return Err("ECN bleaching");
         }
-        if (ect0_increase + ce_increase) < newly_acked || ect1_increase != 0 {
+        if (ect0_increase + ce_increase) < newly_acked || ect1_increase != 0 { // TODO: rewrite
+                                                                               // this constraint
+                                                                               // to enable L4S
             return Err("ECN corruption");
         }
         // If total_increase > newly_acked (which happens when ACKs are lost), this is required by

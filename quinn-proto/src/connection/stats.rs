@@ -139,7 +139,8 @@ pub struct PathStats {
     /// Current congestion window of the connection
     pub cwnd: u64,
     /// Congestion events on the connection
-    pub congestion_events: u64,
+    pub congestion_events: u64, // TODO: consider replacing this with a more fine-grade
+                                // counter that distinguishes between drop and mark events
     /// Spurious congestion events on the connection
     pub spurious_congestion_events: u64,
     /// The amount of packets lost on this path

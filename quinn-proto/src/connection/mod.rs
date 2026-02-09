@@ -997,8 +997,8 @@ impl Connection {
         Some(Transmit {
             destination: self.path.remote,
             size: buf.len(),
-            ecn: if self.path.sending_ecn {
-                Some(EcnCodepoint::Ect0)
+            ecn: if self.path.using_ecn {
+                Some(EcnCodepoint::Ect0) // TODO: add option to use the ECT(1) codepoint
             } else {
                 None
             },
@@ -1062,7 +1062,8 @@ impl Connection {
         Some(Transmit {
             destination,
             size: buf.len(),
-            ecn: None,
+            ecn: None, // NOTE: is there a reason not to use ECN here? It may be required to negotiate
+                       // ECT(1) here?
             segment_size: None,
             src_ip: self.local_ip,
         })
@@ -1532,7 +1533,7 @@ impl Connection {
         }
 
         // Explicit congestion notification
-        if self.path.sending_ecn {
+        if self.path.using_ecn {
             if let Some(ecn) = ack.ecn {
                 // We only examine ECN counters from ACKs that we are certain we received in transmit
                 // order, allowing us to compute an increase in ECN counts to compare against the number
@@ -1545,7 +1546,10 @@ impl Connection {
             } else {
                 // We always start out sending ECN, so any ack that doesn't acknowledge it disables it.
                 debug!("ECN not acknowledged by peer");
-                self.path.sending_ecn = false;
+                self.path.using_ecn = false; // NOTE: negotation may not be completely necessary,
+                                               // since this and another check essentially disables
+                                               // the use of ECN in case there's no ECN-echoing or
+                                               // if the echoing peer is faulty
             }
         }
 
@@ -1602,7 +1606,10 @@ impl Connection {
         match self.spaces[space].detect_ecn(newly_acked, ecn) {
             Err(e) => {
                 debug!("halting ECN due to verification failure: {}", e);
-                self.path.sending_ecn = false;
+                self.path.using_ecn = false; // NOTE: negotation may not be completely necessary,
+                                               // since this and another check essentially disables
+                                               // the use of ECN in case there's no ECN-echoing or
+                                               // if the echoing peer is faulty
                 // Wipe out the existing value because it might be garbage and could interfere with
                 // future attempts to use ECN on new paths.
                 self.spaces[space].ecn_feedback = frame::EcnCounts::ZERO;
@@ -1612,7 +1619,13 @@ impl Connection {
                 self.stats.path.congestion_events += 1;
                 self.path
                     .congestion
-                    .on_congestion_event(now, largest_sent_time, false, true, 0);
+                    .on_congestion_event(now, largest_sent_time, false, true, 0); // TODO: this
+                                                                                  // probably needs
+                                                                                  // to be replaced
+                                                                                  // with a
+                                                                                  // distinct
+                                                                                  // ECN-specific
+                                                                                  // method
             }
         }
     }
@@ -3672,7 +3685,7 @@ impl Connection {
     /// Whether explicit congestion notification is in use on outgoing packets.
     #[cfg(test)]
     pub(crate) fn using_ecn(&self) -> bool {
-        self.path.sending_ecn
+        self.path.using_ecn // TODO: affected by future L4S-related changes
     }
 
     /// The number of received bytes in the current path
