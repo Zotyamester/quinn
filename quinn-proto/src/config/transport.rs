@@ -51,6 +51,7 @@ pub struct TransportConfig {
     #[cfg(test)]
     pub(crate) deterministic_packet_numbers: bool,
 
+    pub(crate) enable_ecn: bool,
     pub(crate) congestion_controller_factory: Arc<dyn congestion::ControllerFactory + Send + Sync>,
 
     pub(crate) enable_segmentation_offload: bool,
@@ -308,6 +309,15 @@ impl TransportConfig {
         self
     }
 
+    /// Whether to enable sending Explicit Congestion Notification (ECN) if remote peer supports it
+    ///
+    /// This allows congestion controllers to rely on ECN-CE marks (echoed by the remote peer
+    /// through ECN counters) instead of drops for detecting congestion on the path.
+    pub fn enable_ecn(&mut self, value: bool) -> &mut Self {
+        self.enable_ecn = value;
+        self
+    }
+
     /// How to construct new `congestion::Controller`s
     ///
     /// Typically the refcounted configuration of a `congestion::Controller`,
@@ -386,6 +396,7 @@ impl Default for TransportConfig {
             #[cfg(test)]
             deterministic_packet_numbers: false,
 
+            enable_ecn: true,
             congestion_controller_factory: Arc::new(congestion::CubicConfig::default()),
 
             enable_segmentation_offload: true,
@@ -420,7 +431,8 @@ impl fmt::Debug for TransportConfig {
             datagram_receive_buffer_size,
             datagram_send_buffer_size,
             #[cfg(test)]
-                deterministic_packet_numbers: _,
+            deterministic_packet_numbers: _,
+            enable_ecn: send_ecn,
             congestion_controller_factory: _,
             enable_segmentation_offload,
             qlog_sink,
@@ -451,6 +463,7 @@ impl fmt::Debug for TransportConfig {
             .field("allow_spin", allow_spin)
             .field("datagram_receive_buffer_size", datagram_receive_buffer_size)
             .field("datagram_send_buffer_size", datagram_send_buffer_size)
+            .field("send_ecn", send_ecn)
             // congestion_controller_factory not debug
             .field("enable_segmentation_offload", enable_segmentation_offload);
         if cfg!(feature = "qlog") {

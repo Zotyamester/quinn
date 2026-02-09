@@ -16,8 +16,13 @@ use qlog::events::quic::MetricsUpdated;
 pub(super) struct PathData {
     pub(super) remote: SocketAddr,
     pub(super) rtt: RttEstimator,
-    /// Whether we're enabling ECN on outgoing packets
-    pub(super) sending_ecn: bool,
+    /// Whether ECN is enabled administratively; TODO: this may end up being an enum denoting
+    /// the ECN mode (i.e., disabled, ECT(0), ECT(1)) instead of a bool flag
+    pub(super) ecn_enabled: bool,
+    /// Whether we're marking outgoing packets with ECT and checking received ECN counts; NOTE:
+    /// this is supposed to be an operational status, a simple bool flag indicating if ECN is
+    /// enabled on this path
+    pub(super) using_ecn: bool,
     /// Congestion controller state
     pub(super) congestion: Box<dyn congestion::Controller>,
     /// Pacing state
@@ -70,7 +75,8 @@ impl PathData {
         Self {
             remote,
             rtt: RttEstimator::new(config.initial_rtt),
-            sending_ecn: true,
+            ecn_enabled: config.enable_ecn, // TODO: affected by future L4S-related changes
+            using_ecn: config.enable_ecn, // TODO: affected by future L4S-related changes
             pacing: Pacer::new(
                 config.initial_rtt,
                 congestion.initial_window(),
@@ -119,7 +125,8 @@ impl PathData {
             remote,
             rtt: prev.rtt,
             pacing: Pacer::new(smoothed_rtt, congestion.window(), prev.current_mtu(), now),
-            sending_ecn: true,
+            ecn_enabled: prev.ecn_enabled, // TODO: affected by future L4S-related changes
+            using_ecn: prev.ecn_enabled, // TODO: affected by future L4S-related changes
             congestion,
             challenge: None,
             challenge_pending: false,

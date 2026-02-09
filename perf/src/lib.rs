@@ -56,6 +56,12 @@ pub struct CommonOpt {
     /// Ack Frequency mode
     #[clap(long = "ack-frequency")]
     pub ack_frequency: bool,
+    /// Enable the use of ECN administratively
+    ///
+    /// Note, that this does not guarantee that if ECN will actually be used as it is dependent
+    /// on whether the path and the peer support it.
+    #[clap(long = "enable-ecn")]
+    pub enable_ecn: bool,
     /// Congestion algorithm to use
     #[clap(long = "congestion")]
     pub cong_alg: Option<CongestionAlgorithm>,
@@ -121,6 +127,8 @@ impl CommonOpt {
         if let Some(send_window) = self.send_window {
             transport.send_window(send_window);
         }
+
+        transport.enable_ecn(self.enable_ecn);
 
         #[cfg(feature = "qlog")]
         if let Some(qlog_file) = &self.qlog_file {
