@@ -632,7 +632,7 @@ fn prepare_msg(
     hdr.msg_control = ctrl.0.as_mut_ptr() as _;
     hdr.msg_controllen = CMSG_LEN as _;
     let mut encoder = unsafe { cmsg::Encoder::new(hdr) };
-    let ecn = transmit.ecn.map_or(0, |x| x as libc::c_int);
+    let ecn = transmit.ecn as u8 as libc::c_int;
     // True for IPv4 or IPv4-Mapped IPv6
     let is_ipv4 = transmit.destination.is_ipv4()
         || matches!(transmit.destination.ip(), IpAddr::V6(addr) if addr.to_ipv4_mapped().is_some());

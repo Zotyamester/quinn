@@ -104,7 +104,7 @@ enum ConnectionEvent {
 fn udp_transmit<'a>(t: &proto::Transmit, buffer: &'a [u8]) -> udp::Transmit<'a> {
     udp::Transmit {
         destination: t.destination,
-        ecn: t.ecn.map(udp_ecn),
+        ecn: udp_ecn(t.ecn),
         contents: buffer,
         segment_size: t.segment_size,
         src_ip: t.src_ip,
@@ -113,6 +113,7 @@ fn udp_transmit<'a>(t: &proto::Transmit, buffer: &'a [u8]) -> udp::Transmit<'a> 
 
 fn udp_ecn(ecn: proto::EcnCodepoint) -> udp::EcnCodepoint {
     match ecn {
+        proto::EcnCodepoint::NotEct => udp::EcnCodepoint::NotEct,
         proto::EcnCodepoint::Ect0 => udp::EcnCodepoint::Ect0,
         proto::EcnCodepoint::Ect1 => udp::EcnCodepoint::Ect1,
         proto::EcnCodepoint::Ce => udp::EcnCodepoint::Ce,

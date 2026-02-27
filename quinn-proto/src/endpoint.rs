@@ -137,7 +137,7 @@ impl Endpoint {
         now: Instant,
         remote: SocketAddr,
         local_ip: Option<IpAddr>,
-        ecn: Option<EcnCodepoint>,
+        ecn: EcnCodepoint,
         data: BytesMut,
         buf: &mut Vec<u8>,
     ) -> Option<DatagramEvent> {
@@ -183,7 +183,7 @@ impl Endpoint {
                 }
                 return Some(DatagramEvent::Response(Transmit {
                     destination: remote,
-                    ecn: None,
+                    ecn: EcnCodepoint::NotEct,
                     size: buf.len(),
                     segment_size: None,
                     src_ip: local_ip,
@@ -307,7 +307,7 @@ impl Endpoint {
 
         Some(Transmit {
             destination: addresses.remote,
-            ecn: None,
+            ecn: EcnCodepoint::NotEct,
             size: buf.len(),
             segment_size: None,
             src_ip: addresses.local_ip,
@@ -754,7 +754,7 @@ impl Endpoint {
 
         Ok(Transmit {
             destination: incoming.addresses.remote,
-            ecn: None,
+            ecn: EcnCodepoint::NotEct,
             size: buf.len(),
             segment_size: None,
             src_ip: incoming.addresses.local_ip,
@@ -868,7 +868,7 @@ impl Endpoint {
         partial_encode.finish(buf, &*crypto.header.local, Some((0, &*crypto.packet.local)));
         Transmit {
             destination: addresses.remote,
-            ecn: None,
+            ecn: EcnCodepoint::NotEct,
             size: buf.len(),
             segment_size: None,
             src_ip: addresses.local_ip,
@@ -1146,7 +1146,7 @@ pub enum DatagramEvent {
 pub struct Incoming {
     received_at: Instant,
     addresses: FourTuple,
-    ecn: Option<EcnCodepoint>,
+    ecn: EcnCodepoint,
     packet: InitialPacket,
     rest: Option<BytesMut>,
     crypto: Keys,

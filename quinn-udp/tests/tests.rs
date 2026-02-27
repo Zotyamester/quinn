@@ -23,7 +23,7 @@ fn basic() {
         &recv.into(),
         Transmit {
             destination: dst_addr,
-            ecn: None,
+            ecn: EcnCodepoint::NotEct,
             contents: b"hello",
             segment_size: None,
             src_ip: None,
@@ -46,7 +46,7 @@ fn basic_src_ip() {
         &recv.into(),
         Transmit {
             destination: dst_addr,
-            ecn: None,
+            ecn: EcnCodepoint::NotEct,
             contents: b"hello",
             segment_size: None,
             src_ip: Some(src_ip),
@@ -64,7 +64,7 @@ fn ecn_v6() {
             &recv,
             Transmit {
                 destination: recv.local_addr().unwrap().as_socket().unwrap(),
-                ecn: Some(codepoint),
+                ecn: codepoint,
                 contents: b"hello",
                 segment_size: None,
                 src_ip: None,
@@ -84,7 +84,7 @@ fn ecn_v4() {
             &recv,
             Transmit {
                 destination: recv.local_addr().unwrap().as_socket().unwrap(),
-                ecn: Some(codepoint),
+                ecn: codepoint,
                 contents: b"hello",
                 segment_size: None,
                 src_ip: None,
@@ -129,7 +129,7 @@ fn ecn_v6_dualstack() {
                 &recv,
                 Transmit {
                     destination: dst,
-                    ecn: Some(codepoint),
+                    ecn: codepoint,
                     contents: b"hello",
                     segment_size: None,
                     src_ip: None,
@@ -169,7 +169,7 @@ fn ecn_v4_mapped_v6() {
             &recv,
             Transmit {
                 destination: recv_v4_mapped_v6,
-                ecn: Some(codepoint),
+                ecn: codepoint,
                 contents: b"hello",
                 segment_size: None,
                 src_ip: None,
@@ -201,7 +201,7 @@ fn gso() {
         &recv.into(),
         Transmit {
             destination: dst_addr,
-            ecn: None,
+            ecn: EcnCodepoint::NotEct,
             contents: &msg,
             segment_size: Some(SEGMENT_SIZE),
             src_ip: None,
@@ -274,7 +274,7 @@ fn socket_buffers() {
         &recv,
         Transmit {
             destination: recv.local_addr().unwrap().as_socket().unwrap(),
-            ecn: None,
+            ecn: EcnCodepoint::NotEct,
             contents: b"hello",
             segment_size: None,
             src_ip: None,
@@ -355,7 +355,7 @@ fn test_send_recv(send: &Socket, recv: &Socket, transmit: Transmit<'_>) {
                 .expect("API_LEVEL environment variable to be set on Android")
                 <= 25
         {
-            assert_eq!(meta.ecn, None);
+            assert_eq!(meta.ecn, EcnCodepoint::NotEct);
         } else {
             assert_eq!(meta.ecn, transmit.ecn);
         }

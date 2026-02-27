@@ -711,13 +711,13 @@ fn packet_size(transmit: &Transmit, buffer: &Bytes) -> usize {
 }
 
 fn set_congestion_experienced(
-    x: Option<EcnCodepoint>,
+    x: EcnCodepoint,
     congestion_experienced: bool,
-) -> Option<EcnCodepoint> {
-    x.map(|codepoint| match congestion_experienced {
+) -> EcnCodepoint {
+    match congestion_experienced {
         true => EcnCodepoint::Ce,
-        false => codepoint,
-    })
+        false => x,
+    }
 }
 
 static SERVER_PORTS: LazyLock<Mutex<RangeFrom<u16>>> = LazyLock::new(|| Mutex::new(4433..));
