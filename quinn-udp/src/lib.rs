@@ -110,7 +110,7 @@ pub struct RecvMeta {
     /// [`len`]: RecvMeta::len
     pub stride: usize,
     /// The Explicit Congestion Notification bits for the datagram(s) in the buffer
-    pub ecn: Option<EcnCodepoint>,
+    pub ecn: EcnCodepoint,
     /// The destination IP address which was encoded in this datagram
     ///
     /// Populated on platforms: Windows, Linux, Android (API level > 25),
@@ -127,7 +127,7 @@ impl Default for RecvMeta {
             addr: SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0),
             len: 0,
             stride: 0,
-            ecn: None,
+            ecn: EcnCodepoint::NotEct,
             dst_ip: None,
             interface_index: None,
         }
@@ -140,7 +140,7 @@ pub struct Transmit<'a> {
     /// The socket this datagram should be sent to
     pub destination: SocketAddr,
     /// Explicit congestion notification bits to set on the packet
-    pub ecn: Option<EcnCodepoint>,
+    pub ecn: EcnCodepoint,
     /// Contents of the datagram
     pub contents: &'a [u8],
     /// The segment size if this transmission contains multiple datagrams.
@@ -236,6 +236,8 @@ where
 #[repr(u8)]
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum EcnCodepoint {
+    /// The Not-ECT codepoint, indicating that an endpoint is not ECN-capable
+    NotEct = 0b00,
     /// The ECT(0) codepoint, indicating that an endpoint is ECN-capable
     Ect0 = 0b10,
     /// The ECT(1) codepoint, indicating that an endpoint is ECN-capable
@@ -246,16 +248,14 @@ pub enum EcnCodepoint {
 
 impl EcnCodepoint {
     /// Create new object from the given bits
-    pub fn from_bits(x: u8) -> Option<Self> {
+    pub fn from_bits(x: u8) -> Self {
         use EcnCodepoint::*;
-        Some(match x & 0b11 {
+        match x & 0b11 {
             0b10 => Ect0,
             0b01 => Ect1,
             0b11 => Ce,
-            _ => {
-                return None;
-            }
-        })
+            _ => NotEct,
+        }
     }
 }
 
@@ -292,7 +292,7 @@ mod tests {
     fn make_transmit(contents: &[u8], segment_size: Option<usize>) -> Transmit<'_> {
         Transmit {
             destination: SocketAddr::from((Ipv4Addr::UNSPECIFIED, 1)),
-            ecn: None,
+            ecn: EcnCodepoint::NotEct,
             contents,
             segment_size,
             src_ip: None,

@@ -651,6 +651,7 @@ fn respond(
 #[inline]
 fn proto_ecn(ecn: udp::EcnCodepoint) -> proto::EcnCodepoint {
     match ecn {
+        udp::EcnCodepoint::NotEct => proto::EcnCodepoint::NotEct,
         udp::EcnCodepoint::Ect0 => proto::EcnCodepoint::Ect0,
         udp::EcnCodepoint::Ect1 => proto::EcnCodepoint::Ect1,
         udp::EcnCodepoint::Ce => proto::EcnCodepoint::Ce,
@@ -871,7 +872,7 @@ impl RecvState {
                                 now,
                                 meta.addr,
                                 meta.dst_ip,
-                                meta.ecn.map(proto_ecn),
+                                proto_ecn(meta.ecn),
                                 buf,
                                 &mut response_buffer,
                             ) {
