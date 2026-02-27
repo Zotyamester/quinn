@@ -766,6 +766,8 @@ impl Connection {
                 "Previous packet must have been finished"
             );
 
+            let ecn = EcnCodepoint::NotEct;
+
             let builder = builder_storage.insert(PacketBuilder::new(
                 now,
                 space_id,
@@ -773,6 +775,7 @@ impl Connection {
                 buf,
                 buf_capacity,
                 datagram_start,
+                ecn,
                 ack_eliciting,
                 self,
             )?);
@@ -871,7 +874,7 @@ impl Connection {
                     return Some(Transmit {
                         destination: remote,
                         size: buf.len(),
-                        ecn: None,
+                        ecn: ecn, // TODO: should it use ECN???
                         segment_size: None,
                         src_ip: self.local_ip,
                     });
@@ -940,6 +943,13 @@ impl Connection {
 
         self.app_limited = buf.is_empty() && !congestion_blocked;
 
+        let ecn = if self.path.using_ecn {
+            self.path.ecn_mode.codepoint()
+        } else {
+            EcnCodepoint::NotEct
+        };
+
+
         // Send MTU probe if necessary
         if buf.is_empty() && self.state.is_established() {
             let space_id = SpaceId::Data;
@@ -958,6 +968,7 @@ impl Connection {
                 buf,
                 buf_capacity,
                 0,
+                ecn,
                 true,
                 self,
             )?;
@@ -997,11 +1008,7 @@ impl Connection {
         Some(Transmit {
             destination: self.path.remote,
             size: buf.len(),
-            ecn: if self.path.using_ecn {
-                self.path.ecn_mode.codepoint()
-            } else {
-                None
-            },
+            ecn,
             segment_size: match num_datagrams {
                 1 => None,
                 _ => Some(segment_size),
@@ -1030,6 +1037,8 @@ impl Connection {
 
         let buf_capacity = buf.capacity();
 
+        let ecn = EcnCodepoint::NotEct;
+
         // Use the previous CID to avoid linking the new path with the previous path. We
         // don't bother accounting for possible retirement of that prev_cid because this is
         // sent once, immediately after migration, when the CID is known to be valid. Even
@@ -1042,6 +1051,7 @@ impl Connection {
             buf,
             buf_capacity,
             0,
+            ecn,
             false,
             self,
         )?;
@@ -1062,8 +1072,7 @@ impl Connection {
         Some(Transmit {
             destination,
             size: buf.len(),
-            ecn: None, // NOTE: is there a reason not to use ECN here? It may be required to negotiate
-                       // ECT(1) here?
+            ecn: EcnCodepoint::NotEct, // NOTE: is there a reason not to use ECN here? It may be required to negotiate ECT(1) here?
             segment_size: None,
             src_ip: self.local_ip,
         })
@@ -1462,9 +1471,16 @@ impl Connection {
 
         // Avoid DoS from unreasonably huge ack ranges by filtering out just the new acks.
         let mut newly_acked = ArrayRangeSet::new();
+        let mut newly_acked_ect0 = ArrayRangeSet::new();
+        let mut newly_acked_ect1 = ArrayRangeSet::new();
         for range in ack.iter() {
             self.packet_number_filter.check_ack(space, range.clone())?;
-            for (&pn, _) in self.spaces[space].sent_packets.range(range) {
+            for (&pn, pkt_info) in self.spaces[space].sent_packets.range(range) {
+                match pkt_info.ecn {
+                    EcnCodepoint::Ect0 => { newly_acked_ect0.insert_one(pn); }
+                    EcnCodepoint::Ect1 => { newly_acked_ect1.insert_one(pn); }
+                    _ => {}
+                }
                 newly_acked.insert_one(pn);
             }
         }
@@ -1534,6 +1550,8 @@ impl Connection {
 
         // Explicit congestion notification
         if self.path.using_ecn {
+            let newly_acked_ect0 = newly_acked_ect0.len() as u64;
+            let newly_acked_ect1 = newly_acked_ect1.len() as u64;
             if let Some(ecn) = ack.ecn {
                 // We only examine ECN counters from ACKs that we are certain we received in transmit
                 // order, allowing us to compute an increase in ECN counts to compare against the number
@@ -1541,15 +1559,12 @@ impl Connection {
                 // reordering.
                 if new_largest {
                     let sent = self.spaces[space].largest_acked_packet_sent;
-                    self.process_ecn(now, space, newly_acked.len() as u64, ecn, sent);
+                    self.process_ecn(now, space, newly_acked_ect0, newly_acked_ect1, ecn, sent);
                 }
-            } else {
-                // We always start out sending ECN, so any ack that doesn't acknowledge it disables it.
+            } else if newly_acked_ect0 > 0 || newly_acked_ect1 > 0 {
+                // We sent out packets marked with ECN, so any ack that doesn't acknowledge it disables it.
                 debug!("ECN not acknowledged by peer");
-                self.path.using_ecn = false; // NOTE: negotation may not be completely necessary,
-                                             // since this and another check essentially disables
-                                             // the use of ECN in case there's no ECN-echoing or
-                                             // if the echoing peer is faulty
+                self.path.using_ecn = false;
             }
         }
 
@@ -1599,17 +1614,18 @@ impl Connection {
         &mut self,
         now: Instant,
         space: SpaceId,
-        newly_acked: u64,
+        newly_acked_ect0: u64,
+        newly_acked_ect1: u64,
         ecn: frame::EcnCounts,
         largest_sent_time: Instant,
     ) {
-        match self.spaces[space].detect_ecn(newly_acked, ecn) {
+        match self.spaces[space].detect_ecn(newly_acked_ect0, newly_acked_ect1, ecn) {
             Err(e) => {
                 debug!("halting ECN due to verification failure: {}", e);
                 self.path.using_ecn = false; // NOTE: negotation may not be completely necessary,
-                                               // since this and another check essentially disables
-                                               // the use of ECN in case there's no ECN-echoing or
-                                               // if the echoing peer is faulty
+                                             // since this and another check essentially disables
+                                             // the use of ECN in case there's no ECN-echoing or
+                                             // if the echoing peer is faulty
                 // Wipe out the existing value because it might be garbage and could interfere with
                 // future attempts to use ECN on new paths.
                 self.spaces[space].ecn_feedback = frame::EcnCounts::ZERO;
@@ -1619,13 +1635,7 @@ impl Connection {
                 self.stats.path.congestion_events += 1;
                 self.path
                     .congestion
-                    .on_congestion_event(now, largest_sent_time, false, true, 0); // TODO: this
-                                                                                  // probably needs
-                                                                                  // to be replaced
-                                                                                  // with a
-                                                                                  // distinct
-                                                                                  // ECN-specific
-                                                                                  // method
+                    .on_congestion_event(now, largest_sent_time, false, true, 0);
             }
         }
     }
@@ -1967,7 +1977,7 @@ impl Connection {
         &mut self,
         now: Instant,
         space_id: SpaceId,
-        ecn: Option<EcnCodepoint>,
+        ecn: EcnCodepoint,
         packet: Option<u64>,
         spin: bool,
         is_1rtt: bool,
@@ -1976,12 +1986,12 @@ impl Connection {
         self.reset_keep_alive(now);
         self.reset_idle_timeout(now, space_id);
         self.permit_idle_reset = true;
-        self.receiving_ecn |= ecn.is_some();
-        if let Some(x) = ecn {
+        self.receiving_ecn |= ecn != EcnCodepoint::NotEct;
+        if ecn != EcnCodepoint::NotEct {
             let space = &mut self.spaces[space_id];
-            space.ecn_counters += x;
+            space.ecn_counters += ecn;
 
-            if x.is_ce() {
+            if ecn.is_ce() {
                 space.pending_acks.set_immediate_ack_required();
             }
         }
@@ -2050,7 +2060,7 @@ impl Connection {
         &mut self,
         now: Instant,
         remote: SocketAddr,
-        ecn: Option<EcnCodepoint>,
+        ecn: EcnCodepoint,
         packet_number: u64,
         packet: InitialPacket,
         remaining: Option<BytesMut>,
@@ -2264,7 +2274,7 @@ impl Connection {
         &mut self,
         now: Instant,
         remote: SocketAddr,
-        ecn: Option<EcnCodepoint>,
+        ecn: EcnCodepoint,
         data: BytesMut,
     ) {
         self.path.total_recvd = self.path.total_recvd.saturating_add(data.len() as u64);
@@ -2292,7 +2302,7 @@ impl Connection {
         &mut self,
         now: Instant,
         remote: SocketAddr,
-        ecn: Option<EcnCodepoint>,
+        ecn: EcnCodepoint,
         partial_decode: PartialDecode,
     ) {
         if let Some(decoded) = packet_crypto::unprotect_header(
@@ -2309,7 +2319,7 @@ impl Connection {
         &mut self,
         now: Instant,
         remote: SocketAddr,
-        ecn: Option<EcnCodepoint>,
+        ecn: EcnCodepoint,
         packet: Option<Packet>,
         stateless_reset: bool,
     ) {
