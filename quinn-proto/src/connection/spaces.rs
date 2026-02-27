@@ -11,8 +11,7 @@ use tracing::trace;
 
 use super::assembler::Assembler;
 use crate::{
-    Dir, Duration, Instant, SocketAddr, StreamId, TransportError, VarInt, connection::StreamsState,
-    crypto::Keys, frame, packet::SpaceId, range_set::ArrayRangeSet, shared::IssuedCid,
+    Dir, Duration, EcnCodepoint, Instant, SocketAddr, StreamId, TransportError, VarInt, connection::StreamsState, crypto::Keys, frame, packet::SpaceId, range_set::ArrayRangeSet, shared::IssuedCid
 };
 
 pub(super) struct PacketSpace {
@@ -177,7 +176,8 @@ impl PacketSpace {
     /// Verifies sanity of an ECN block and returns whether congestion was encountered.
     pub(super) fn detect_ecn(
         &mut self,
-        newly_acked: u64,
+        newly_acked_ect0: u64,
+        newly_acked_ect1: u64,
         ecn: frame::EcnCounts,
     ) -> Result<bool, &'static str> {
         let ect0_increase = ecn
@@ -192,14 +192,18 @@ impl PacketSpace {
             .ce
             .checked_sub(self.ecn_feedback.ce)
             .ok_or("peer CE count regression")?;
-        let total_increase = ect0_increase + ect1_increase + ce_increase;
-        if total_increase < newly_acked {
+
+        if ect0_increase + ce_increase < newly_acked_ect0
+            || ect1_increase + ce_increase < newly_acked_ect1
+            || ect0_increase + ect1_increase + ce_increase < newly_acked_ect0 + newly_acked_ect1 {
             return Err("ECN bleaching");
         }
-        // If total_increase > newly_acked (which happens when ACKs are lost), this is required by
+
+        // It is okay, if increase > newly_acked (which happens when ACKs are lost), as per
         // the draft so that long-term drift does not occur. If =, then the only question is whether
         // to count CE packets as CE or ECT0. Recording them as CE is more consistent and keeps the
         // congestion check obvious.
+
         self.ecn_feedback = ecn;
         Ok(ce_increase != 0)
     }
@@ -289,6 +293,8 @@ pub(super) struct SentPacket {
     /// framing overhead. Zero if this packet is not counted towards congestion control, i.e. not an
     /// "in flight" packet.
     pub(super) size: u16,
+    /// The ECN bits set on the packet.
+    pub(super) ecn: EcnCodepoint,
     /// Whether an acknowledgement is expected directly in response to this packet.
     pub(super) ack_eliciting: bool,
     /// The largest packet number acknowledged by this packet
