@@ -4,6 +4,7 @@ use std::sync::Arc;
 use super::{BASE_DATAGRAM_SIZE, Controller, ControllerFactory};
 use crate::Instant;
 use crate::connection::RttEstimator;
+use crate::frame::EcnCounts;
 
 /// A simple, standard congestion controller
 #[derive(Debug, Clone)]
@@ -89,6 +90,7 @@ impl Controller for NewReno {
         is_persistent_congestion: bool,
         _is_ecn: bool,
         _lost_bytes: u64,
+        _counts: &EcnCounts,
     ) {
         if sent <= self.recovery_start_time {
             return;

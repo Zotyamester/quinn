@@ -1636,7 +1636,7 @@ impl Connection {
                 self.stats.path.congestion_events += 1;
                 self.path
                     .congestion
-                    .on_congestion_event(now, largest_sent_time, false, true, 0);
+                    .on_congestion_event(now, largest_sent_time, false, true, 0, &self.spaces[space].ecn_feedback);
             }
         }
     }
@@ -1858,6 +1858,7 @@ impl Connection {
                     in_persistent_congestion,
                     false,
                     size_of_lost_packets,
+                    &self.spaces[pn_space].ecn_feedback
                 );
             }
         }

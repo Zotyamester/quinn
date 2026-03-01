@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use super::{BASE_DATAGRAM_SIZE, Controller, ControllerFactory};
 use crate::connection::RttEstimator;
+use crate::frame::EcnCounts;
 use crate::{Duration, Instant};
 
 /// CUBIC Constants.
@@ -184,6 +185,7 @@ impl Controller for Cubic {
         is_persistent_congestion: bool,
         is_ecn: bool,
         _lost_bytes: u64,
+        _counts: &EcnCounts,
     ) {
         if self
             .state
