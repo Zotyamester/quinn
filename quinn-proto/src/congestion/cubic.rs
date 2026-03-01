@@ -77,6 +77,8 @@ pub struct Cubic {
     config: Arc<CubicConfig>,
     current_mtu: u64,
     state: State,
+    /// Whether handling of ECN (specifically, ECT(0)) is allowed.
+    allow_ecn: bool,
     /// Copy of the controller state to restore when a spurious congestion event is detected.
     pre_congestion_state: Option<State>,
 }
@@ -90,6 +92,7 @@ impl Cubic {
                 ssthresh: u64::MAX,
                 ..Default::default()
             },
+            allow_ecn: false,
             current_mtu: current_mtu as u64,
             pre_congestion_state: None,
             config,
@@ -270,7 +273,10 @@ impl Controller for Cubic {
         self.config.initial_window
     }
 
-    fn supports_ect0(&self) -> bool { true }
+    fn enable_ect0(&mut self) -> bool {
+        self.allow_ecn = true;
+        true
+    }
 
     fn into_any(self: Box<Self>) -> Box<dyn Any> {
         self
