@@ -8,6 +8,7 @@ use crate::congestion::ControllerMetrics;
 use crate::congestion::bbr::bw_estimation::BandwidthEstimation;
 use crate::congestion::bbr::min_max::MinMax;
 use crate::connection::RttEstimator;
+use crate::frame::EcnCounts;
 use crate::{Duration, Instant};
 
 use super::{BASE_DATAGRAM_SIZE, Controller, ControllerFactory};
@@ -471,6 +472,7 @@ impl Controller for Bbr {
         _is_persistent_congestion: bool,
         _is_ecn: bool,
         lost_bytes: u64,
+        _counts: &EcnCounts,
     ) {
         self.loss_state.lost_bytes += lost_bytes;
     }
