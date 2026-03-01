@@ -8,7 +8,7 @@ use qlog::streamer::QlogStreamer;
 #[cfg(feature = "qlog")]
 use crate::QlogStream;
 use crate::{
-    Duration, EcnCodepoint, INITIAL_MTU, MAX_UDP_PAYLOAD, VarInt, VarIntBoundsExceeded, congestion, connection::qlog::QlogSink
+    Duration, EcnCodepoint, INITIAL_MTU, MAX_UDP_PAYLOAD, VarInt, VarIntBoundsExceeded, congestion::{self, Controller}, connection::qlog::QlogSink
 };
 
 /// Administrative mode of Explicit Congestion Notification (ECN)
@@ -27,11 +27,20 @@ pub enum EcnMode {
 }
 
 impl EcnMode {
-    /// Whether the current ECN mode enables the use of ECN
     pub fn is_enabled(&self) -> bool {
         match self {
             EcnMode::Disabled => false,
             _ => true,
+        }
+    }
+
+    /// Returns the ECN mode consistent with the CC
+    pub fn supported_mode(&self, controller: &Box<dyn Controller>) -> Self {
+        match self {
+            EcnMode::Classic if controller.supports_ect0() => EcnMode::Classic,
+            EcnMode::L4S if controller.supports_ect1() => EcnMode::L4S,
+            EcnMode::L4S if controller.supports_ect0() => EcnMode::Classic,
+            _ => EcnMode::Disabled,
         }
     }
 

@@ -270,6 +270,8 @@ impl Controller for Cubic {
         self.config.initial_window
     }
 
+    fn supports_ect0(&self) -> bool { true }
+
     fn into_any(self: Box<Self>) -> Box<dyn Any> {
         self
     }
