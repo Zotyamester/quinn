@@ -27,6 +27,7 @@ pub enum EcnMode {
 }
 
 impl EcnMode {
+    /// Returns whether the ECN mode indicates an enabled setting (ECT(0) or ECT(1)).
     pub fn is_enabled(&self) -> bool {
         match self {
             EcnMode::Disabled => false,
@@ -35,11 +36,11 @@ impl EcnMode {
     }
 
     /// Returns the ECN mode consistent with the CC
-    pub fn supported_mode(&self, controller: &Box<dyn Controller>) -> Self {
+    pub fn supported_mode(&self, controller: &mut Box<dyn Controller>) -> Self {
         match self {
-            EcnMode::Classic if controller.supports_ect0() => EcnMode::Classic,
-            EcnMode::L4S if controller.supports_ect1() => EcnMode::L4S,
-            EcnMode::L4S if controller.supports_ect0() => EcnMode::Classic,
+            EcnMode::Classic if controller.enable_ect0() => EcnMode::Classic,
+            EcnMode::L4S if controller.enable_ect1() => EcnMode::L4S,
+            EcnMode::L4S if controller.enable_ect0() => EcnMode::Classic,
             _ => EcnMode::Disabled,
         }
     }

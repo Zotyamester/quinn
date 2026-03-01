@@ -67,11 +67,11 @@ impl PathData {
         now: Instant,
         config: &TransportConfig,
     ) -> Self {
-        let congestion = config
+        let mut congestion = config
             .congestion_controller_factory
             .clone()
             .build(now, config.get_initial_mtu());
-        let ecn_mode = config.ecn_mode.supported_mode(&congestion);
+        let ecn_mode = config.ecn_mode.supported_mode(&mut congestion);
         Self {
             remote,
             rtt: RttEstimator::new(config.initial_rtt),
