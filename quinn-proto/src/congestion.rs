@@ -87,6 +87,12 @@ pub trait Controller: Send + Sync {
     /// Initial congestion window
     fn initial_window(&self) -> u64;
 
+    /// Indicates whether the controller supports ECT(0)
+    fn supports_ect0(&self) -> bool { false }
+
+    /// Indicates whether the controller supports ECT(1)
+    fn supports_ect1(&self) -> bool { false }
+
     /// Returns Self for use in down-casting to extract implementation details
     fn into_any(self: Box<Self>) -> Box<dyn Any>;
 }
