@@ -1,6 +1,6 @@
 //! Logic for controlling the rate at which data is sent
 
-use crate::Instant;
+use crate::{Instant, frame::EcnCounts};
 use crate::connection::RttEstimator;
 use std::any::Any;
 use std::sync::Arc;
@@ -58,6 +58,7 @@ pub trait Controller: Send + Sync {
         is_persistent_congestion: bool,
         is_ecn: bool,
         lost_bytes: u64,
+        counts: &EcnCounts,
     );
 
     /// Packets were incorrectly deemed lost
