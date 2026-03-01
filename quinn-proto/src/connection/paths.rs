@@ -73,11 +73,12 @@ impl PathData {
             .congestion_controller_factory
             .clone()
             .build(now, config.get_initial_mtu());
+        let ecn_mode = config.ecn_mode.supported_mode(&congestion);
         Self {
             remote,
             rtt: RttEstimator::new(config.initial_rtt),
-            ecn_mode: config.ecn_mode,
-            using_ecn: config.ecn_mode.is_enabled(),
+            ecn_mode: ecn_mode,
+            using_ecn: ecn_mode.is_enabled(),
             pacing: Pacer::new(
                 config.initial_rtt,
                 congestion.initial_window(),
