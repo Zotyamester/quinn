@@ -92,7 +92,7 @@ pub trait Controller: Send + Sync {
 
     /// Assures the controller that using ECT(0) is supported and enabled by the endpoint.
     /// Returns whether the controller supports and agrees to handle ECT(0) packets accordingly.
-    fn enable_ect0(&mut self) -> bool { false }
+    fn enable_ect0(&mut self) -> bool { true }
 
     /// Assures the controller that using ECT(1) is supported and enabled by the endpoint.
     /// Returns whether the controller supports and agrees to handle ECT(1) packets accordingly.
