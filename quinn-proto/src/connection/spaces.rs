@@ -173,13 +173,13 @@ impl PacketSpace {
         SendableFrames { acks, other }
     }
 
-    /// Verifies sanity of an ECN block and returns whether congestion was encountered.
+    /// Verifies sanity of an ECN block and returns the increase in each counter.
     pub(super) fn detect_ecn(
         &mut self,
         newly_acked_ect0: u64,
         newly_acked_ect1: u64,
         ecn: frame::EcnCounts,
-    ) -> Result<bool, &'static str> {
+    ) -> Result<frame::EcnCounts, &'static str> {
         let ect0_increase = ecn
             .ect0
             .checked_sub(self.ecn_feedback.ect0)
@@ -205,7 +205,7 @@ impl PacketSpace {
         // congestion check obvious.
 
         self.ecn_feedback = ecn;
-        Ok(ce_increase != 0)
+        Ok(frame::EcnCounts { ect0: ect0_increase, ect1: ect1_increase, ce: ce_increase })
     }
 
     /// Stop tracking sent packet `number`, and return what we knew about it

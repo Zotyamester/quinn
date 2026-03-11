@@ -16,12 +16,19 @@ pub struct Prague {
     /// Maximum number of bytes in flight that may be sent.
     window: u64,
     ect1_enabled: bool,
+    ect_count: f64,
+    ce_count: f64,
+    last_alpha_update: Instant,
+    alpha: Option<f64>,
+    rtt_virt: Duration,
 }
 
 impl Prague {
     /// Following the Linux Prague reference implementation's choice of constants according to
     /// 2.4.4. Reduced RTT-Dependence (draft-briscoe-iccrg-prague-congestion-control-04)
     const RTT_VIRT_MIN: Duration = Duration::from_millis(25);
+
+    const EWMA_GAIN: f64 = 1.0 / 16.0;
 
     /// Construct a state using the given `config` and current time `now`
     pub fn new(config: Arc<PragueConfig>, now: Instant, current_mtu: u16) -> Self {
@@ -34,6 +41,11 @@ impl Prague {
             cubic,
             window,
             ect1_enabled: false,
+            ect_count: 0.0,
+            ce_count: 0.0,
+            last_alpha_update: Instant::now(), // this
+            alpha: None,
+            rtt_virt: Prague::RTT_VIRT_MIN,
         }
     }
 }
@@ -49,9 +61,10 @@ impl Controller for Prague {
     ) {
         // Use a corrected, virtual RTT by adjusting the smoothed RTT to account for long-running
         // classic flows with high RTTs, as recommended in A.1.6. Reduce RTT Dependence (RFC9331)
-        let rtt_virt = rtt.get().max(Prague::RTT_VIRT_MIN);
+        self.rtt_virt = rtt.get().max(Prague::RTT_VIRT_MIN);
         // TODO: While implementing Prague, be ware of this rtt_virt calculation! Furthermore, use
         // it to limit the update of the fraction and EWMA to once per virtual RTT.
+        self.cubic.on_ack(now, sent, bytes, app_limited, rtt);
     }
 
     fn on_congestion_event(
@@ -61,11 +74,35 @@ impl Controller for Prague {
         is_persistent_congestion: bool,
         is_ecn: bool,
         lost_bytes: u64,
-        counts: &EcnCounts,
+        diff: EcnCounts,
     ) {
         if !self.ect1_enabled {
-            self.cubic.on_congestion_event(now, sent, is_persistent_congestion, is_ecn, lost_bytes, counts);
+            self.cubic.on_congestion_event(now, sent, is_persistent_congestion, is_ecn, lost_bytes, diff);
             return;
+        }
+        if let Some(alpha) = self.alpha {
+            self.ect_count += diff.ect1 as f64;
+            self.ce_count += diff.ce as f64;
+            if now - self.last_alpha_update > self.rtt_virt {
+                let frac = self.ce_count / (self.ce_count + self.ect_count);
+                self.alpha = Some((1.0 - Prague::EWMA_GAIN) * alpha + Prague::EWMA_GAIN * frac);
+                self.last_alpha_update = now;
+                self.ect_count = 0.0;
+                self.ce_count = 0.0;
+            }
+        } else if diff.ce > 0 {
+            self.last_alpha_update = now;
+            self.alpha = Some(1.0);
+            self.ect_count = diff.ect1 as f64;
+            self.ce_count = diff.ce as f64;
+        }
+
+        self.cubic.set_window((self.cubic.window() as f64 * self.alpha.unwrap()) as u64);
+
+        // last congestion stuff???
+        // here i'm starting to get lost in Google's QUICHE/Prague impl
+        if diff.ce == 0 || lost_bytes > 0 {
+            self.cubic.on_congestion_event(now, sent, is_persistent_congestion, is_ecn, lost_bytes, diff);
         }
     }
 
@@ -73,8 +110,12 @@ impl Controller for Prague {
         self.cubic.on_mtu_update(new_mtu);
     }
 
+    fn set_window(&mut self, size: u64) {
+        self.cubic.set_window(size);
+    }
+
     fn window(&self) -> u64 {
-        self.window
+        self.cubic.window()
     }
 
     fn metrics(&self) -> super::ControllerMetrics {

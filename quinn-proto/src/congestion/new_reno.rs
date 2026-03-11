@@ -90,7 +90,7 @@ impl Controller for NewReno {
         is_persistent_congestion: bool,
         _is_ecn: bool,
         _lost_bytes: u64,
-        _counts: &EcnCounts,
+        _diff: EcnCounts,
     ) {
         if sent <= self.recovery_start_time {
             return;
@@ -109,6 +109,10 @@ impl Controller for NewReno {
     fn on_mtu_update(&mut self, new_mtu: u16) {
         self.current_mtu = new_mtu as u64;
         self.window = self.window.max(self.minimum_window());
+    }
+
+    fn set_window(&mut self, size: u64) {
+        self.window = size;
     }
 
     fn window(&self) -> u64 {
