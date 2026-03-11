@@ -472,7 +472,7 @@ impl Controller for Bbr {
         _is_persistent_congestion: bool,
         _is_ecn: bool,
         lost_bytes: u64,
-        _counts: &EcnCounts,
+        _diff: EcnCounts,
     ) {
         self.loss_state.lost_bytes += lost_bytes;
     }
@@ -482,6 +482,10 @@ impl Controller for Bbr {
         self.min_cwnd = calculate_min_window(self.current_mtu);
         self.init_cwnd = self.config.initial_window.max(self.min_cwnd);
         self.cwnd = self.cwnd.max(self.min_cwnd);
+    }
+
+    fn set_window(&mut self, size: u64) {
+        self.cwnd = size;
     }
 
     fn window(&self) -> u64 {

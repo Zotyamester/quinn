@@ -60,7 +60,7 @@ pub trait Controller: Send + Sync {
         is_persistent_congestion: bool,
         is_ecn: bool,
         lost_bytes: u64,
-        counts: &EcnCounts,
+        diff: EcnCounts,
     );
 
     /// Packets were incorrectly deemed lost
@@ -71,6 +71,9 @@ pub trait Controller: Send + Sync {
 
     /// The known MTU for the current network path has been updated
     fn on_mtu_update(&mut self, new_mtu: u16);
+
+    /// Externally set the CWND size
+    fn set_window(&mut self, size: u64);
 
     /// Number of ack-eliciting bytes that may be in flight
     fn window(&self) -> u64;

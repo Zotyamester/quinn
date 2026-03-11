@@ -191,7 +191,7 @@ impl Controller for Cubic {
         is_persistent_congestion: bool,
         is_ecn: bool,
         _lost_bytes: u64,
-        _counts: &EcnCounts,
+        _diff: EcnCounts,
     ) {
         if self
             .state
@@ -253,6 +253,10 @@ impl Controller for Cubic {
     fn on_mtu_update(&mut self, new_mtu: u16) {
         self.current_mtu = new_mtu as u64;
         self.state.window = self.state.window.max(self.minimum_window());
+    }
+
+    fn set_window(&mut self, size: u64) {
+        self.state.window = size;
     }
 
     fn window(&self) -> u64 {
