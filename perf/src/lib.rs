@@ -231,6 +231,7 @@ pub enum CongestionAlgorithm {
     Cubic,
     Bbr,
     NewReno,
+    Prague,
 }
 
 impl CongestionAlgorithm {
@@ -239,6 +240,7 @@ impl CongestionAlgorithm {
             Self::Cubic => Arc::new(congestion::CubicConfig::default()),
             Self::Bbr => Arc::new(congestion::BbrConfig::default()),
             Self::NewReno => Arc::new(congestion::NewRenoConfig::default()),
+            Self::Prague => Arc::new(congestion::PragueConfig::default()),
         }
     }
 }

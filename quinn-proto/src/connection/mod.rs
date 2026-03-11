@@ -1631,13 +1631,13 @@ impl Connection {
                 // future attempts to use ECN on new paths.
                 self.spaces[space].ecn_feedback = frame::EcnCounts::ZERO;
             }
-            Ok(false) => {}
-            Ok(true) => {
+            Ok(diff) if diff.ce > 0 => {
                 self.stats.path.congestion_events += 1;
                 self.path
                     .congestion
-                    .on_congestion_event(now, largest_sent_time, false, true, 0, &self.spaces[space].ecn_feedback);
+                    .on_congestion_event(now, largest_sent_time, false, true, 0, diff);
             }
+            _ => {}
         }
     }
 
@@ -1858,7 +1858,7 @@ impl Connection {
                     in_persistent_congestion,
                     false,
                     size_of_lost_packets,
-                    &self.spaces[pn_space].ecn_feedback
+                    frame::EcnCounts::ZERO
                 );
             }
         }
