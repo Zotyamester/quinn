@@ -243,7 +243,8 @@ async fn drain_stream(
             first_byte = false;
         }
         let bytes_received = bufs[..size].iter().map(|b| b.len()).sum();
-        recv_stream_stats.on_bytes(bytes_received);
+        let path_stats = stream.path_stats();
+        recv_stream_stats.on_bytes(bytes_received, path_stats.rtt, path_stats.rttvar);
     }
 
     if first_byte {
@@ -319,7 +320,8 @@ async fn request(
         send.write_chunk(Bytes::from_static(&DATA[..chunk_len as usize]))
             .await
             .context("sending response")?;
-        send_stream_stats.on_bytes(chunk_len as usize);
+        let path_stats = send.path_stats();
+        send_stream_stats.on_bytes(chunk_len as usize, path_stats.rtt, path_stats.rttvar);
         upload -= chunk_len;
     }
     send.finish().unwrap();
