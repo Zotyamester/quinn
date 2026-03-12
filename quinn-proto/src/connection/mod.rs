@@ -949,7 +949,6 @@ impl Connection {
             EcnCodepoint::NotEct
         };
 
-
         // Send MTU probe if necessary
         if buf.is_empty() && self.state.is_established() {
             let space_id = SpaceId::Data;
@@ -1274,6 +1273,7 @@ impl Connection {
     pub fn stats(&self) -> ConnectionStats {
         let mut stats = self.stats;
         stats.path.rtt = self.path.rtt.get();
+        stats.path.rttvar = self.path.rtt.var();
         stats.path.cwnd = self.path.congestion.window();
         stats.path.current_mtu = self.path.mtud.current_mtu();
 
@@ -1476,8 +1476,12 @@ impl Connection {
             self.packet_number_filter.check_ack(space, range.clone())?;
             for (&pn, pkt_info) in self.spaces[space].sent_packets.range(range) {
                 match pkt_info.ecn {
-                    EcnCodepoint::Ect0 => { newly_acked_ect0.insert_one(pn); }
-                    EcnCodepoint::Ect1 => { newly_acked_ect1.insert_one(pn); }
+                    EcnCodepoint::Ect0 => {
+                        newly_acked_ect0.insert_one(pn);
+                    }
+                    EcnCodepoint::Ect1 => {
+                        newly_acked_ect1.insert_one(pn);
+                    }
                     _ => {}
                 }
                 newly_acked.insert_one(pn);
@@ -1622,18 +1626,23 @@ impl Connection {
             Err(e) => {
                 debug!("halting ECN due to verification failure: {}", e);
                 self.path.using_ecn = false; // NOTE: negotation may not be completely necessary,
-                                             // since this and another check essentially disables
-                                             // the use of ECN in case there's no ECN-echoing or
-                                             // if the echoing peer is faulty
+                // since this and another check essentially disables
+                // the use of ECN in case there's no ECN-echoing or
+                // if the echoing peer is faulty
                 // Wipe out the existing value because it might be garbage and could interfere with
                 // future attempts to use ECN on new paths.
                 self.spaces[space].ecn_feedback = frame::EcnCounts::ZERO;
             }
             Ok(diff) if diff.ce > 0 => {
                 self.stats.path.congestion_events += 1;
-                self.path
-                    .congestion
-                    .on_congestion_event(now, largest_sent_time, false, true, 0, diff);
+                self.path.congestion.on_congestion_event(
+                    now,
+                    largest_sent_time,
+                    false,
+                    true,
+                    0,
+                    diff,
+                );
             }
             _ => {}
         }
@@ -1856,7 +1865,7 @@ impl Connection {
                     in_persistent_congestion,
                     false,
                     size_of_lost_packets,
-                    frame::EcnCounts::ZERO
+                    frame::EcnCounts::ZERO,
                 );
             }
         }
