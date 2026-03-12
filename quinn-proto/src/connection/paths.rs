@@ -7,7 +7,9 @@ use super::{
     pacing::Pacer,
     spaces::{PacketSpace, SentPacket},
 };
-use crate::{Duration, Instant, TIMER_GRANULARITY, TransportConfig, EcnMode, congestion, packet::SpaceId};
+use crate::{
+    Duration, EcnMode, Instant, TIMER_GRANULARITY, TransportConfig, congestion, packet::SpaceId,
+};
 
 #[cfg(feature = "qlog")]
 use qlog::events::{ExData, quic::MetricsUpdated};
@@ -314,6 +316,11 @@ impl RttEstimator {
     /// The current best RTT estimation.
     pub fn get(&self) -> Duration {
         self.smoothed.unwrap_or(self.latest)
+    }
+
+    /// The current best jitter estimation
+    pub fn var(&self) -> Duration {
+        self.var
     }
 
     /// Conservative estimate of RTT

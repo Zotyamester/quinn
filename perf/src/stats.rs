@@ -144,6 +144,8 @@ impl OpenStreamStats {
             finished: Default::default(),
             duration: Default::default(),
             first_byte_latency: Default::default(),
+            rtt: Default::default(),
+            rttvar: Default::default(),
         };
         let send_stream_stats = Arc::new(send_stream_stats);
         self.push(send_stream_stats.clone());
@@ -159,6 +161,8 @@ impl OpenStreamStats {
             finished: Default::default(),
             duration: Default::default(),
             first_byte_latency: Default::default(),
+            rtt: Default::default(),
+            rttvar: Default::default(),
         };
         let recv_stream_stats = Arc::new(recv_stream_stats);
         self.push(recv_stream_stats.clone());
@@ -178,6 +182,8 @@ pub struct StreamStats {
     finished: AtomicBool,
     duration: AtomicU64,
     first_byte_latency: AtomicU64,
+    rtt: AtomicU64,
+    rttvar: AtomicU64,
 }
 
 impl StreamStats {
@@ -186,8 +192,11 @@ impl StreamStats {
             .store(latency.as_micros() as u64, Ordering::SeqCst);
     }
 
-    pub fn on_bytes(&self, bytes: usize) {
+    pub fn on_bytes(&self, bytes: usize, rtt: Duration, rttvar: Duration) {
         self.bytes.fetch_add(bytes, Ordering::SeqCst);
+        self.rtt.store(rtt.as_micros() as u64, Ordering::SeqCst);
+        self.rttvar
+            .store(rttvar.as_micros() as u64, Ordering::SeqCst);
     }
 
     pub fn finish(&self, duration: Duration) {
@@ -222,6 +231,8 @@ impl Interval {
             id: stream_stats.id,
             bytes,
             sender: stream_stats.sender,
+            rtt: stream_stats.rtt.load(Ordering::SeqCst),
+            rttvar: stream_stats.rttvar.load(Ordering::SeqCst),
         })
     }
 }
@@ -236,6 +247,8 @@ struct StreamIntervalStats {
     id: StreamId,
     bytes: usize,
     sender: bool,
+    rtt: u64,
+    rttvar: u64,
 }
 
 fn throughput_bytes_per_second(duration_in_micros: u64, size: u64) -> f64 {
@@ -351,6 +364,8 @@ mod json {
         bytes: usize,
         bits_per_second: f64,
         sender: bool,
+        rtt: u64,
+        rttvar: u64,
     }
 
     impl Stream {
@@ -368,6 +383,8 @@ mod json {
                 bytes: stats.bytes,
                 bits_per_second,
                 sender: stats.sender,
+                rtt: stats.rtt,
+                rttvar: stats.rttvar,
             }
         }
     }
