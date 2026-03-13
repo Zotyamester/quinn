@@ -14,7 +14,6 @@ pub struct Prague {
     config: Arc<PragueConfig>,
     cubic: Cubic,
     /// Maximum number of bytes in flight that may be sent.
-    window: u64,
     ect1_enabled: bool,
     ect_count: f64,
     ce_count: f64,
@@ -34,12 +33,10 @@ impl Prague {
     pub fn new(config: Arc<PragueConfig>, now: Instant, current_mtu: u16) -> Self {
         let cubic_config = Arc::new(CubicConfig::default());
         let cubic = Cubic::new(cubic_config, now, current_mtu);
-        let window = cubic.window();
 
         Self {
             config,
             cubic,
-            window,
             ect1_enabled: false,
             ect_count: 0.0,
             ce_count: 0.0,
@@ -77,7 +74,14 @@ impl Controller for Prague {
         diff: EcnCounts,
     ) {
         if !self.ect1_enabled {
-            self.cubic.on_congestion_event(now, sent, is_persistent_congestion, is_ecn, lost_bytes, diff);
+            self.cubic.on_congestion_event(
+                now,
+                sent,
+                is_persistent_congestion,
+                is_ecn,
+                lost_bytes,
+                diff,
+            );
             return;
         }
         if let Some(alpha) = self.alpha {
@@ -97,12 +101,20 @@ impl Controller for Prague {
             self.ce_count = diff.ce as f64;
         }
 
-        self.cubic.set_window((self.cubic.window() as f64 * self.alpha.unwrap()) as u64);
+        self.cubic
+            .set_window((self.cubic.window() as f64 * self.alpha.unwrap()) as u64);
 
         // last congestion stuff???
         // here i'm starting to get lost in Google's QUICHE/Prague impl
         if diff.ce == 0 || lost_bytes > 0 {
-            self.cubic.on_congestion_event(now, sent, is_persistent_congestion, is_ecn, lost_bytes, diff);
+            self.cubic.on_congestion_event(
+                now,
+                sent,
+                is_persistent_congestion,
+                is_ecn,
+                lost_bytes,
+                diff,
+            );
         }
     }
 
@@ -146,23 +158,13 @@ impl Controller for Prague {
 
 /// Configuration for the `Prague` congestion controller
 #[derive(Debug, Clone)]
-pub struct PragueConfig {
-    loss_reduction_factor: f32,
-}
+pub struct PragueConfig {}
 
-impl PragueConfig {
-    /// Reduction in congestion window when a new loss event is detected.
-    pub fn loss_reduction_factor(&mut self, value: f32) -> &mut Self {
-        self.loss_reduction_factor = value;
-        self
-    }
-}
+impl PragueConfig {}
 
 impl Default for PragueConfig {
     fn default() -> Self {
-        Self {
-            loss_reduction_factor: 0.5,
-        }
+        Self {}
     }
 }
 
