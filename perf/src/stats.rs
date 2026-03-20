@@ -3,6 +3,7 @@ use quinn::StreamId;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime};
+use tracing::info;
 #[cfg(feature = "json-output")]
 use {std::fs::File, std::io, std::path::Path};
 
@@ -44,15 +45,29 @@ impl Default for Stats {
 }
 
 impl Stats {
+    pub fn elapsed_since_start(&self) -> Duration {
+        self.start_instant.elapsed()
+    }
+
     pub fn on_interval(&mut self, start: Instant, stream_stats: &OpenStreamStats) {
         let mut interval = Interval::new(start - self.start_instant, self.start_instant.elapsed());
         let mut guard = stream_stats.0.lock().unwrap();
 
         guard.retain(|stream_stats| {
+            info!(
+                "request_size={}, bytes={}",
+                stream_stats.request_size,
+                stream_stats.bytes.load(Ordering::SeqCst)
+            );
+
+            // Record stats globally.
             self.record(stream_stats.clone());
+            // Record stats local to the interval on which it was measured.
             interval.record_stream_stats(stream_stats.clone());
-            // Retain if not finished yet
-            !stream_stats.finished.load(Ordering::SeqCst)
+
+            let is_finished = stream_stats.finished.load(Ordering::SeqCst);
+            // Retain if not finished yet, otherwise remove the statistics corresponding to the stream from per stream statistics.
+            !is_finished
         });
 
         self.intervals.push(interval);
@@ -176,8 +191,8 @@ impl OpenStreamStats {
 
 pub struct StreamStats {
     id: StreamId,
-    request_size: u64,
-    bytes: AtomicUsize,
+    request_size: u64,  // ???
+    bytes: AtomicUsize, // ???
     sender: bool,
     finished: AtomicBool,
     duration: AtomicU64,
@@ -192,6 +207,8 @@ impl StreamStats {
             .store(latency.as_micros() as u64, Ordering::SeqCst);
     }
 
+    // What's the point of this function?
+    // Counting what's already stored in `StreamStats::request_size`?
     pub fn on_bytes(&self, bytes: usize, rtt: Duration, rttvar: Duration) {
         self.bytes.fetch_add(bytes, Ordering::SeqCst);
         self.rtt.store(rtt.as_micros() as u64, Ordering::SeqCst);

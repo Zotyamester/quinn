@@ -165,6 +165,7 @@ pub async fn run(opt: Opt) -> Result<()> {
     let mut stats = Stats::default();
 
     let stats_fut = async {
+        let total_duration = Duration::from_secs(opt.duration);
         let interval_duration = Duration::from_secs(opt.interval);
 
         #[cfg(feature = "json-output")]
@@ -172,9 +173,20 @@ pub async fn run(opt: Opt) -> Result<()> {
         #[cfg(not(feature = "json-output"))]
         let allow_table_output = true;
 
+        // Periodically report statistics.
         loop {
+            let elapsed = stats.elapsed_since_start();
+            let remaining = total_duration.saturating_sub(elapsed);
+            debug!(
+                "running intervals... elapsed: {:?}, remaining: {:?}, total: {:?}",
+                elapsed, remaining, total_duration
+            );
+            if remaining.is_zero() {
+                break;
+            }
+
             let start = Instant::now();
-            tokio::time::sleep(interval_duration).await;
+            tokio::time::sleep(interval_duration.min(remaining)).await;
             {
                 stats.on_interval(start, &stream_stats);
 
@@ -194,11 +206,6 @@ pub async fn run(opt: Opt) -> Result<()> {
         _ = tokio::signal::ctrl_c() => {
             info!("shutting down");
             connection.close(0u32.into(), b"interrupted");
-        }
-        // Add a small duration so the final interval can be reported
-        _ = tokio::time::sleep(Duration::from_secs(opt.duration) + Duration::from_millis(200)) => {
-            info!("shutting down");
-            connection.close(0u32.into(), b"done");
         }
     }
 
@@ -301,28 +308,30 @@ async fn request_uni(
 
 async fn request(
     mut send: quinn::SendStream,
-    mut upload: u64,
-    download: u64,
+    upload_size: u64,
+    download_size: u64,
     stream_stats: OpenStreamStats,
 ) -> Result<()> {
     let upload_start = Instant::now();
-    send.write_all(&download.to_be_bytes()).await?;
-    if upload == 0 {
+
+    // Notify the server about the chunk size.
+    send.write_all(&download_size.to_be_bytes()).await?;
+    if upload_size == 0 {
         send.finish().unwrap();
         return Ok(());
     }
 
-    let send_stream_stats = stream_stats.new_sender(&send, upload);
+    let send_stream_stats = stream_stats.new_sender(&send, upload_size); // StreamStats::request_size is derived from the value provided here
 
     static DATA: [u8; 1024 * 1024] = [42; 1024 * 1024];
-    while upload > 0 {
-        let chunk_len = upload.min(DATA.len() as u64);
-        send.write_chunk(Bytes::from_static(&DATA[..chunk_len as usize]))
+
+    // Send `DATA` to server chunk-by-chunk and record specific stats in the meantime.
+    for chunk in DATA.chunks(upload_size as usize) {
+        send.write_chunk(Bytes::from_static(chunk))
             .await
             .context("sending response")?;
         let path_stats = send.path_stats();
-        send_stream_stats.on_bytes(chunk_len as usize, path_stats.rtt, path_stats.rttvar);
-        upload -= chunk_len;
+        send_stream_stats.on_bytes(chunk.len(), path_stats.rtt, path_stats.rttvar);
     }
     send.finish().unwrap();
     // Wait for stream to close
