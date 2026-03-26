@@ -11,8 +11,8 @@ use crate::frame::EcnCounts;
 /// A simple, standard congestion controller
 #[derive(Debug, Clone)]
 pub struct Prague {
-    config: Arc<PragueConfig>,
-    cubic: Cubic,
+    // config: Arc<PragueConfig>,
+    controller: Cubic,
     /// Maximum number of bytes in flight that may be sent.
     ect1_enabled: bool,
     ect_count: f64,
@@ -30,13 +30,13 @@ impl Prague {
     const EWMA_GAIN: f64 = 1.0 / 16.0;
 
     /// Construct a state using the given `config` and current time `now`
-    pub fn new(config: Arc<PragueConfig>, now: Instant, current_mtu: u16) -> Self {
+    pub fn new(_config: Arc<PragueConfig>, now: Instant, current_mtu: u16) -> Self {
         let cubic_config = Arc::new(CubicConfig::default());
         let cubic = Cubic::new(cubic_config, now, current_mtu);
 
         Self {
-            config,
-            cubic,
+            // config,
+            controller: cubic,
             ect1_enabled: false,
             ect_count: 0.0,
             ce_count: 0.0,
@@ -61,7 +61,7 @@ impl Controller for Prague {
         self.rtt_virt = rtt.get().max(Prague::RTT_VIRT_MIN);
         // TODO: While implementing Prague, be ware of this rtt_virt calculation! Furthermore, use
         // it to limit the update of the fraction and EWMA to once per virtual RTT.
-        self.cubic.on_ack(now, sent, bytes, app_limited, rtt);
+        self.controller.on_ack(now, sent, bytes, app_limited, rtt);
     }
 
     fn on_congestion_event(
@@ -74,7 +74,7 @@ impl Controller for Prague {
         diff: EcnCounts,
     ) {
         if !self.ect1_enabled {
-            self.cubic.on_congestion_event(
+            self.controller.on_congestion_event(
                 now,
                 sent,
                 is_persistent_congestion,
@@ -101,13 +101,10 @@ impl Controller for Prague {
             self.ce_count = diff.ce as f64;
         }
 
-        self.cubic
-            .set_window((self.cubic.window() as f64 * self.alpha.unwrap()) as u64);
+        let reduction_factor = self.alpha.unwrap();
 
-        // last congestion stuff???
-        // here i'm starting to get lost in Google's QUICHE/Prague impl
         if diff.ce == 0 || lost_bytes > 0 {
-            self.cubic.on_congestion_event(
+            self.controller.on_congestion_event(
                 now,
                 sent,
                 is_persistent_congestion,
@@ -115,23 +112,32 @@ impl Controller for Prague {
                 lost_bytes,
                 diff,
             );
+
+            // Overwrite CWND in case ECN indicates greater reduction.
+            if reduction_factor >= 0.5 {
+                self.controller
+                    .set_window((self.controller.window() as f64 * reduction_factor) as u64);
+            }
+        } else {
+            self.controller
+                .set_window((self.controller.window() as f64 * reduction_factor) as u64);
         }
     }
 
     fn on_mtu_update(&mut self, new_mtu: u16) {
-        self.cubic.on_mtu_update(new_mtu);
+        self.controller.on_mtu_update(new_mtu);
     }
 
     fn set_window(&mut self, size: u64) {
-        self.cubic.set_window(size);
+        self.controller.set_window(size);
     }
 
     fn window(&self) -> u64 {
-        self.cubic.window()
+        self.controller.window()
     }
 
     fn metrics(&self) -> super::ControllerMetrics {
-        self.cubic.metrics()
+        self.controller.metrics()
     }
 
     fn clone_box(&self) -> Box<dyn Controller> {
@@ -139,11 +145,11 @@ impl Controller for Prague {
     }
 
     fn initial_window(&self) -> u64 {
-        self.cubic.initial_window()
+        self.controller.initial_window()
     }
 
     fn enable_ect0(&mut self) -> bool {
-        self.cubic.enable_ect0()
+        self.controller.enable_ect0()
     }
 
     fn enable_ect1(&mut self) -> bool {
