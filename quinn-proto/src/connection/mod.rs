@@ -874,7 +874,7 @@ impl Connection {
                     return Some(Transmit {
                         destination: remote,
                         size: buf.len(),
-                        ecn: ecn, // TODO: should it use ECN???
+                        ecn, // TODO: should it use ECN???
                         segment_size: None,
                         src_ip: self.local_ip,
                     });
@@ -1636,6 +1636,10 @@ impl Connection {
                 self.spaces[space].ecn_feedback = frame::EcnCounts::ZERO;
             }
             Ok(diff) if diff.ce > 0 => {
+                debug!(
+                    "ECN counter increments: ECT(1) = {}, CE = {}",
+                    diff.ect1, diff.ce
+                );
                 self.stats.path.congestion_events += 1;
                 self.path.congestion.on_congestion_event(
                     now,
@@ -1999,6 +2003,15 @@ impl Connection {
         self.permit_idle_reset = true;
         self.receiving_ecn |= ecn != EcnCodepoint::NotEct;
         if ecn != EcnCodepoint::NotEct {
+            if self.is_handshaking() {
+                match ecn {
+                    EcnCodepoint::Ect0 => debug!("detected ECT(0) packet marking"),
+                    EcnCodepoint::Ect1 => debug!("detected ECT(1) packet marking"),
+                    EcnCodepoint::Ce => debug!("detected CE packet marking"),
+                    _ => {}
+                }
+            }
+
             let space = &mut self.spaces[space_id];
             space.ecn_counters += ecn;
 
