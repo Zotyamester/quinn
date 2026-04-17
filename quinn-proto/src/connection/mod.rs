@@ -1071,7 +1071,7 @@ impl Connection {
         Some(Transmit {
             destination,
             size: buf.len(),
-            ecn: EcnCodepoint::NotEct, // NOTE: is there a reason not to use ECN here? It may be required to negotiate ECT(1) here?
+            ecn: EcnCodepoint::NotEct, // NOTE: is there a reason not to use ECN here?
             segment_size: None,
             src_ip: self.local_ip,
         })
@@ -2001,15 +2001,6 @@ impl Connection {
         self.permit_idle_reset = true;
         self.receiving_ecn |= ecn != EcnCodepoint::NotEct;
         if ecn != EcnCodepoint::NotEct {
-            if self.is_handshaking() {
-                match ecn {
-                    EcnCodepoint::Ect0 => debug!("detected ECT(0) packet marking"),
-                    EcnCodepoint::Ect1 => debug!("detected ECT(1) packet marking"),
-                    EcnCodepoint::Ce => debug!("detected CE packet marking"),
-                    _ => {}
-                }
-            }
-
             let space = &mut self.spaces[space_id];
             space.ecn_counters += ecn;
 
