@@ -127,9 +127,15 @@ impl PathData {
         Self {
             remote,
             rtt: prev.rtt,
-            pacing: Pacer::new(smoothed_rtt, congestion.window(), prev.current_mtu(), now),
-            ecn_enabled: prev.ecn_enabled, // TODO: affected by future L4S-related changes
-            using_ecn: prev.ecn_enabled,   // TODO: affected by future L4S-related changes
+            pacing: Pacer::new(
+                smoothed_rtt,
+                congestion.window(),
+                prev.current_mtu(),
+                prev.pacing.max_bytes_per_second(),
+                now,
+            ),
+            ecn_mode: prev.ecn_mode,
+            using_ecn: prev.ecn_mode.is_enabled(),
             congestion,
             challenge: None,
             challenge_pending: false,

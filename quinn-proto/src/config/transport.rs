@@ -8,7 +8,9 @@ use qlog::streamer::QlogStreamer;
 #[cfg(feature = "qlog")]
 use crate::QlogStream;
 use crate::{
-    Duration, EcnCodepoint, INITIAL_MTU, MAX_UDP_PAYLOAD, VarInt, VarIntBoundsExceeded, congestion::{self, Controller}, connection::qlog::QlogSink
+    Duration, EcnCodepoint, INITIAL_MTU, MAX_UDP_PAYLOAD, VarInt, VarIntBoundsExceeded,
+    congestion::{self, Controller},
+    connection::qlog::QlogSink,
 };
 
 /// Administrative mode of Explicit Congestion Notification (ECN)
@@ -45,7 +47,7 @@ impl EcnMode {
         }
     }
 
-    /// The corresponding ECN codepoint if ECN is enabled, `None` otherwise
+    /// The corresponding ECN codepoint if ECN is enabled, `EcnCodepoint::NotEct` otherwise
     pub fn codepoint(&self) -> EcnCodepoint {
         match self {
             EcnMode::Disabled => EcnCodepoint::NotEct,
@@ -485,7 +487,7 @@ impl fmt::Debug for TransportConfig {
             datagram_receive_buffer_size,
             datagram_send_buffer_size,
             #[cfg(test)]
-            deterministic_packet_numbers: _,
+                deterministic_packet_numbers: _,
             ecn_mode,
             congestion_controller_factory: _,
             enable_segmentation_offload,
