@@ -293,7 +293,7 @@ pub(super) struct TestEndpoint {
     timeout: Option<Instant>,
     pub(super) outbound: VecDeque<(Transmit, Bytes)>,
     delayed: VecDeque<(Transmit, Bytes)>,
-    pub(super) inbound: VecDeque<(Instant, Option<EcnCodepoint>, BytesMut)>,
+    pub(super) inbound: VecDeque<(Instant, EcnCodepoint, BytesMut)>,
     accepted: Option<Result<ConnectionHandle, ConnectionError>>,
     pub(super) connections: HashMap<ConnectionHandle, Connection>,
     conn_events: HashMap<ConnectionHandle, VecDeque<ConnectionEvent>>,
@@ -710,10 +710,7 @@ fn packet_size(transmit: &Transmit, buffer: &Bytes) -> usize {
     buffer.len()
 }
 
-fn set_congestion_experienced(
-    x: EcnCodepoint,
-    congestion_experienced: bool,
-) -> EcnCodepoint {
+fn set_congestion_experienced(x: EcnCodepoint, congestion_experienced: bool) -> EcnCodepoint {
     match congestion_experienced {
         true => EcnCodepoint::Ce,
         false => x,

@@ -56,7 +56,7 @@ fn version_negotiate_server() {
         now,
         client_addr,
         None,
-        None,
+        EcnCodepoint::NotEct,
         // Long-header packet with reserved version number
         hex!("80 0a1a2a3a 04 00000000 04 00000000 00")[..].into(),
         &mut buf,
@@ -97,7 +97,7 @@ fn version_negotiate_client() {
         now,
         server_addr,
         None,
-        None,
+        EcnCodepoint::NotEct,
         // Version negotiation packet for reserved version, with empty DCID
         hex!(
             "80 00000000 00 04 00000000
@@ -260,15 +260,29 @@ fn stateless_reset_limit() {
     );
     let time = Instant::now();
     let mut buf = Vec::new();
-    let event = endpoint.handle(time, remote, None, None, [0u8; 1024][..].into(), &mut buf);
+    let event = endpoint.handle(
+        time,
+        remote,
+        None,
+        EcnCodepoint::NotEct,
+        [0u8; 1024][..].into(),
+        &mut buf,
+    );
     assert!(matches!(event, Some(DatagramEvent::Response(_))));
-    let event = endpoint.handle(time, remote, None, None, [0u8; 1024][..].into(), &mut buf);
+    let event = endpoint.handle(
+        time,
+        remote,
+        None,
+        EcnCodepoint::NotEct,
+        [0u8; 1024][..].into(),
+        &mut buf,
+    );
     assert!(event.is_none());
     let event = endpoint.handle(
         time + endpoint_config.min_reset_interval - Duration::from_nanos(1),
         remote,
         None,
-        None,
+        EcnCodepoint::NotEct,
         [0u8; 1024][..].into(),
         &mut buf,
     );
@@ -277,7 +291,7 @@ fn stateless_reset_limit() {
         time + endpoint_config.min_reset_interval,
         remote,
         None,
-        None,
+        EcnCodepoint::NotEct,
         [0u8; 1024][..].into(),
         &mut buf,
     );
@@ -2331,7 +2345,7 @@ fn malformed_token_len() {
         Instant::now(),
         client_addr,
         None,
-        None,
+        EcnCodepoint::NotEct,
         hex!("8900 0000 0101 0000 1b1b 841b 0000 0000 3f00")[..].into(),
         &mut buf,
     );
@@ -3523,7 +3537,14 @@ fn reject_short_idcid() {
     // Initial header that has an empty DCID but is otherwise well-formed
     let mut initial = BytesMut::from(hex!("c4 00000001 00 00 00 3f").as_ref());
     initial.resize(MIN_INITIAL_SIZE.into(), 0);
-    let event = server.handle(now, client_addr, None, None, initial, &mut buf);
+    let event = server.handle(
+        now,
+        client_addr,
+        None,
+        EcnCodepoint::NotEct,
+        initial,
+        &mut buf,
+    );
     let Some(DatagramEvent::Response(Transmit { .. })) = event else {
         panic!("expected an initial close");
     };
