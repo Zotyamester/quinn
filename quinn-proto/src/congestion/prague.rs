@@ -2,6 +2,8 @@ use std::any::Any;
 use std::sync::Arc;
 use std::time::Duration;
 
+use tracing::trace;
+
 use super::{Controller, ControllerFactory};
 use crate::Instant;
 use crate::congestion::{Cubic, CubicConfig};
@@ -101,7 +103,10 @@ impl Controller for Prague {
             self.ce_count = diff.ce as f64;
         }
 
-        let reduction_factor = self.alpha.unwrap();
+        let reduction_factor = self.alpha.unwrap_or(0f64);
+        if reduction_factor > 0f64 + f64::EPSILON {
+            trace!("reduction_factor={}", reduction_factor);
+        }
 
         if diff.ce == 0 || lost_bytes > 0 {
             self.controller.on_congestion_event(
