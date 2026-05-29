@@ -104,9 +104,6 @@ impl Controller for Prague {
         }
 
         let reduction_factor = self.alpha.unwrap_or(0f64);
-        if reduction_factor > 0f64 + f64::EPSILON {
-            trace!("reduction_factor={}", reduction_factor);
-        }
 
         if diff.ce == 0 || lost_bytes > 0 {
             self.controller.on_congestion_event(

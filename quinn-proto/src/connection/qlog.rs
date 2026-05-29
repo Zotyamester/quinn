@@ -5,6 +5,7 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use qlog::events::quic::CongestionStateUpdatedTrigger;
 #[cfg(feature = "qlog")]
 use qlog::{
     events::{
@@ -172,6 +173,35 @@ impl QlogSink {
             };
 
             stream.emit_event(orig_rem_cid, EventData::QuicPacketReceived(event), now);
+        }
+    }
+
+    pub(super) fn emit_congestion_event(
+        &self,
+        description: String,
+        trigger: CongestionStateUpdatedTrigger,
+        now: Instant,
+        orig_rem_cid: ConnectionId,
+    ) {
+        #[cfg(feature = "qlog")]
+        {
+            use qlog::events::quic::CongestionStateUpdated;
+
+            let Some(stream) = self.stream.as_ref() else {
+                return;
+            };
+
+            let event = CongestionStateUpdated {
+                old: None,
+                new: description,
+                trigger: Some(trigger),
+            };
+
+            stream.emit_event(
+                orig_rem_cid,
+                EventData::QuicCongestionStateUpdated(event),
+                now,
+            );
         }
     }
 }
