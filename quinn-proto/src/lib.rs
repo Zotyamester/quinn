@@ -310,7 +310,7 @@ pub struct Transmit {
     /// The socket this datagram should be sent to
     pub destination: SocketAddr,
     /// Explicit congestion notification bits to set on the packet
-    pub ecn: EcnCodepoint,
+    pub ecn: Option<EcnCodepoint>,
     /// Amount of data written to the caller-supplied buffer
     pub size: usize,
     /// The segment size if this transmission contains multiple datagrams.

@@ -437,7 +437,6 @@ impl std::ops::AddAssign<EcnCodepoint> for EcnCounts {
             EcnCodepoint::Ce => {
                 self.ce += 1;
             }
-            _ => {}
         }
     }
 }

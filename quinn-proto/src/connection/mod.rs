@@ -767,8 +767,6 @@ impl Connection {
                 "Previous packet must have been finished"
             );
 
-            let ecn = EcnCodepoint::NotEct;
-
             let builder = builder_storage.insert(PacketBuilder::new(
                 now,
                 space_id,
@@ -776,7 +774,7 @@ impl Connection {
                 buf,
                 buf_capacity,
                 datagram_start,
-                ecn,
+                None,
                 ack_eliciting,
                 self,
             )?);
@@ -875,7 +873,7 @@ impl Connection {
                     return Some(Transmit {
                         destination: remote,
                         size: buf.len(),
-                        ecn, // TODO: should it use ECN???
+                        ecn: None, // TODO: should it use ECN???
                         segment_size: None,
                         src_ip: self.local_ip,
                     });
@@ -947,7 +945,7 @@ impl Connection {
         let ecn = if self.path.using_ecn {
             self.path.ecn_mode.codepoint()
         } else {
-            EcnCodepoint::NotEct
+            None
         };
 
         // Send MTU probe if necessary
@@ -1037,8 +1035,6 @@ impl Connection {
 
         let buf_capacity = buf.capacity();
 
-        let ecn = EcnCodepoint::NotEct;
-
         // Use the previous CID to avoid linking the new path with the previous path. We
         // don't bother accounting for possible retirement of that prev_cid because this is
         // sent once, immediately after migration, when the CID is known to be valid. Even
@@ -1051,7 +1047,7 @@ impl Connection {
             buf,
             buf_capacity,
             0,
-            ecn,
+            None,
             false,
             self,
         )?;
@@ -1072,7 +1068,7 @@ impl Connection {
         Some(Transmit {
             destination,
             size: buf.len(),
-            ecn: EcnCodepoint::NotEct, // NOTE: is there a reason not to use ECN here?
+            ecn: None, // NOTE: is there a reason not to use ECN here?
             segment_size: None,
             src_ip: self.local_ip,
         })
@@ -1478,10 +1474,10 @@ impl Connection {
             self.packet_number_filter.check_ack(space, range.clone())?;
             for (&pn, pkt_info) in self.spaces[space].sent_packets.range(range) {
                 match pkt_info.ecn {
-                    EcnCodepoint::Ect0 => {
+                    Some(EcnCodepoint::Ect0) => {
                         newly_acked_ect0.insert_one(pn);
                     }
-                    EcnCodepoint::Ect1 => {
+                    Some(EcnCodepoint::Ect1) => {
                         newly_acked_ect1.insert_one(pn);
                     }
                     _ => {}
@@ -2004,7 +2000,7 @@ impl Connection {
         &mut self,
         now: Instant,
         space_id: SpaceId,
-        ecn: EcnCodepoint,
+        ecn: Option<EcnCodepoint>,
         packet: Option<u64>,
         spin: bool,
         is_1rtt: bool,
@@ -2013,12 +2009,12 @@ impl Connection {
         self.reset_keep_alive(now);
         self.reset_idle_timeout(now, space_id);
         self.permit_idle_reset = true;
-        self.receiving_ecn |= ecn != EcnCodepoint::NotEct;
-        if ecn != EcnCodepoint::NotEct {
+        self.receiving_ecn |= ecn.is_some();
+        if let Some(x) = ecn {
             let space = &mut self.spaces[space_id];
-            space.ecn_counters += ecn;
+            space.ecn_counters += x;
 
-            if ecn.is_ce() {
+            if x.is_ce() {
                 space.pending_acks.set_immediate_ack_required();
             }
         }
@@ -2087,7 +2083,7 @@ impl Connection {
         &mut self,
         now: Instant,
         remote: SocketAddr,
-        ecn: EcnCodepoint,
+        ecn: Option<EcnCodepoint>,
         packet_number: u64,
         packet: InitialPacket,
         remaining: Option<BytesMut>,
@@ -2301,7 +2297,7 @@ impl Connection {
         &mut self,
         now: Instant,
         remote: SocketAddr,
-        ecn: EcnCodepoint,
+        ecn: Option<EcnCodepoint>,
         data: BytesMut,
     ) {
         self.path.total_recvd = self.path.total_recvd.saturating_add(data.len() as u64);
@@ -2329,7 +2325,7 @@ impl Connection {
         &mut self,
         now: Instant,
         remote: SocketAddr,
-        ecn: EcnCodepoint,
+        ecn: Option<EcnCodepoint>,
         partial_decode: PartialDecode,
     ) {
         if let Some(decoded) = packet_crypto::unprotect_header(
@@ -2346,7 +2342,7 @@ impl Connection {
         &mut self,
         now: Instant,
         remote: SocketAddr,
-        ecn: EcnCodepoint,
+        ecn: Option<EcnCodepoint>,
         packet: Option<Packet>,
         stateless_reset: bool,
     ) {

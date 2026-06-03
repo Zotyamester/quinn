@@ -47,12 +47,12 @@ impl EcnMode {
         }
     }
 
-    /// The corresponding ECN codepoint if ECN is enabled, `EcnCodepoint::NotEct` otherwise
-    pub fn codepoint(&self) -> EcnCodepoint {
+    /// The corresponding ECN codepoint if ECN is enabled, `None` otherwise
+    pub fn codepoint(&self) -> Option<EcnCodepoint> {
         match self {
-            EcnMode::Disabled => EcnCodepoint::NotEct,
-            EcnMode::Classic => EcnCodepoint::Ect0,
-            EcnMode::L4S => EcnCodepoint::Ect1,
+            EcnMode::Disabled => None,
+            EcnMode::Classic => Some(EcnCodepoint::Ect0),
+            EcnMode::L4S => Some(EcnCodepoint::Ect1),
         }
     }
 }

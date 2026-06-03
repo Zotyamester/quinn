@@ -11,7 +11,7 @@ pub(super) struct PacketBuilder {
     pub(super) datagram_start: usize,
     pub(super) space: SpaceId,
     pub(super) partial_encode: PartialEncode,
-    pub(super) ecn: EcnCodepoint,
+    pub(super) ecn: Option<EcnCodepoint>,
     pub(super) ack_eliciting: bool,
     pub(super) exact_number: u64,
     pub(super) short_header: bool,
@@ -37,7 +37,7 @@ impl PacketBuilder {
         buffer: &mut Vec<u8>,
         buffer_capacity: usize,
         datagram_start: usize,
-        ecn: EcnCodepoint,
+        ecn: Option<EcnCodepoint>,
         ack_eliciting: bool,
         conn: &mut Connection,
     ) -> Option<Self> {

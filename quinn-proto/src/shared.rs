@@ -21,7 +21,7 @@ pub(crate) enum ConnectionEventInner {
 pub(crate) struct DatagramConnectionEvent {
     pub(crate) now: Instant,
     pub(crate) remote: SocketAddr,
-    pub(crate) ecn: EcnCodepoint,
+    pub(crate) ecn: Option<EcnCodepoint>,
     pub(crate) first_decode: PartialDecode,
     pub(crate) remaining: Option<BytesMut>,
 }
@@ -144,8 +144,6 @@ impl fmt::Display for ConnectionId {
 #[repr(u8)]
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum EcnCodepoint {
-    /// The Not-ECT codepoint, indicating that an endpoint is not ECN-capable
-    NotEct = 0b00,
     /// The ECT(0) codepoint, indicating that an endpoint is ECN-capable
     Ect0 = 0b10,
     /// The ECT(1) codepoint, indicating that an endpoint is ECN-capable
@@ -156,14 +154,16 @@ pub enum EcnCodepoint {
 
 impl EcnCodepoint {
     /// Create new object from the given bits
-    pub fn from_bits(x: u8) -> Self {
+    pub fn from_bits(x: u8) -> Option<Self> {
         use EcnCodepoint::*;
-        match x & 0b11 {
+        Some(match x & 0b11 {
             0b10 => Ect0,
             0b01 => Ect1,
             0b11 => Ce,
-            _ => NotEct,
-        }
+            _ => {
+                return None;
+            }
+        })
     }
 
     /// Returns whether the codepoint is a CE, signalling that congestion was experienced

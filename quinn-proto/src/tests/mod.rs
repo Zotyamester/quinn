@@ -56,7 +56,7 @@ fn version_negotiate_server() {
         now,
         client_addr,
         None,
-        EcnCodepoint::NotEct,
+        None,
         // Long-header packet with reserved version number
         hex!("80 0a1a2a3a 04 00000000 04 00000000 00")[..].into(),
         &mut buf,
@@ -97,7 +97,7 @@ fn version_negotiate_client() {
         now,
         server_addr,
         None,
-        EcnCodepoint::NotEct,
+        None,
         // Version negotiation packet for reserved version, with empty DCID
         hex!(
             "80 00000000 00 04 00000000
@@ -264,7 +264,7 @@ fn stateless_reset_limit() {
         time,
         remote,
         None,
-        EcnCodepoint::NotEct,
+        None,
         [0u8; 1024][..].into(),
         &mut buf,
     );
@@ -273,7 +273,7 @@ fn stateless_reset_limit() {
         time,
         remote,
         None,
-        EcnCodepoint::NotEct,
+        None,
         [0u8; 1024][..].into(),
         &mut buf,
     );
@@ -282,7 +282,7 @@ fn stateless_reset_limit() {
         time + endpoint_config.min_reset_interval - Duration::from_nanos(1),
         remote,
         None,
-        EcnCodepoint::NotEct,
+        None,
         [0u8; 1024][..].into(),
         &mut buf,
     );
@@ -291,7 +291,7 @@ fn stateless_reset_limit() {
         time + endpoint_config.min_reset_interval,
         remote,
         None,
-        EcnCodepoint::NotEct,
+        None,
         [0u8; 1024][..].into(),
         &mut buf,
     );
@@ -2345,7 +2345,7 @@ fn malformed_token_len() {
         Instant::now(),
         client_addr,
         None,
-        EcnCodepoint::NotEct,
+        None,
         hex!("8900 0000 0101 0000 1b1b 841b 0000 0000 3f00")[..].into(),
         &mut buf,
     );
@@ -3541,7 +3541,7 @@ fn reject_short_idcid() {
         now,
         client_addr,
         None,
-        EcnCodepoint::NotEct,
+        None,
         initial,
         &mut buf,
     );

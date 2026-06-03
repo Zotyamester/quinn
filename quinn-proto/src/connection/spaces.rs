@@ -294,7 +294,7 @@ pub(super) struct SentPacket {
     /// "in flight" packet.
     pub(super) size: u16,
     /// The ECN bits set on the packet.
-    pub(super) ecn: EcnCodepoint,
+    pub(super) ecn: Option<EcnCodepoint>,
     /// Whether an acknowledgement is expected directly in response to this packet.
     pub(super) ack_eliciting: bool,
     /// The largest packet number acknowledged by this packet
