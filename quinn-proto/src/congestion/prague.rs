@@ -2,8 +2,6 @@ use std::any::Any;
 use std::sync::Arc;
 use std::time::Duration;
 
-use tracing::trace;
-
 use super::{Controller, ControllerFactory};
 use crate::Instant;
 use crate::congestion::{Cubic, CubicConfig};
