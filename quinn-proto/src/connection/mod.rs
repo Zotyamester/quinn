@@ -10,7 +10,6 @@ use std::{
 use bytes::{Bytes, BytesMut};
 use frame::StreamMetaVec;
 
-use ::qlog::events::quic::CongestionStateUpdatedTrigger;
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use thiserror::Error;
 use tracing::{debug, error, trace, trace_span, warn};
@@ -1645,9 +1644,8 @@ impl Connection {
                     0,
                     diff,
                 );
-                self.config.qlog_sink.emit_congestion_event(
-                    format!("ECN,d_ect1={},d_ce={}", diff.ect1, diff.ce),
-                    CongestionStateUpdatedTrigger::Ecn,
+                self.config.qlog_sink.emit_ecn_event(
+                    diff,
                     now,
                     self.orig_rem_cid,
                 );
@@ -1875,9 +1873,8 @@ impl Connection {
                     size_of_lost_packets,
                     frame::EcnCounts::ZERO,
                 );
-                self.config.qlog_sink.emit_congestion_event(
-                    format!("LOSS,size_of_loss={}", size_of_lost_packets),
-                    CongestionStateUpdatedTrigger::Ecn,
+                self.config.qlog_sink.emit_loss_event(
+                    size_of_lost_packets,
                     now,
                     self.orig_rem_cid,
                 );

@@ -5,7 +5,6 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use qlog::events::quic::CongestionStateUpdatedTrigger;
 #[cfg(feature = "qlog")]
 use qlog::{
     events::{
@@ -20,9 +19,7 @@ use qlog::{
 use tracing::warn;
 
 use crate::{
-    ConnectionId, Instant,
-    connection::{PathData, SentPacket},
-    packet::SpaceId,
+    ConnectionId, EcnCounts, Instant, connection::{PathData, SentPacket}, packet::SpaceId
 };
 
 /// Shareable handle to a single qlog output stream
@@ -176,16 +173,15 @@ impl QlogSink {
         }
     }
 
-    pub(super) fn emit_congestion_event(
+    pub(super) fn emit_loss_event(
         &self,
-        description: String,
-        trigger: CongestionStateUpdatedTrigger,
+        size_of_lost_packets: u64,
         now: Instant,
         orig_rem_cid: ConnectionId,
     ) {
         #[cfg(feature = "qlog")]
         {
-            use qlog::events::quic::CongestionStateUpdated;
+            use qlog::events::quic::{CongestionStateUpdated,  CongestionStateUpdatedTrigger};
 
             let Some(stream) = self.stream.as_ref() else {
                 return;
@@ -193,8 +189,36 @@ impl QlogSink {
 
             let event = CongestionStateUpdated {
                 old: None,
-                new: description,
-                trigger: Some(trigger),
+                new: format!("LOSS,size_of_loss={}", size_of_lost_packets),
+                trigger: Some(CongestionStateUpdatedTrigger::Unknown),
+            };
+
+            stream.emit_event(
+                orig_rem_cid,
+                EventData::QuicCongestionStateUpdated(event),
+                now,
+            );
+        }
+    }
+
+    pub(super) fn emit_ecn_event(
+        &self,
+        diff: EcnCounts,
+        now: Instant,
+        orig_rem_cid: ConnectionId,
+    ) {
+        #[cfg(feature = "qlog")]
+        {
+            use qlog::events::quic::{CongestionStateUpdated,  CongestionStateUpdatedTrigger};
+
+            let Some(stream) = self.stream.as_ref() else {
+                return;
+            };
+
+            let event = CongestionStateUpdated {
+                old: None,
+                new: format!("ECN,d_ect1={},d_ce={}", diff.ect1, diff.ce),
+                trigger: Some(CongestionStateUpdatedTrigger::Ecn),
             };
 
             stream.emit_event(
