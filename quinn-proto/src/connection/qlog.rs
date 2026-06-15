@@ -19,7 +19,9 @@ use qlog::{
 use tracing::warn;
 
 use crate::{
-    ConnectionId, EcnCounts, Instant, connection::{PathData, SentPacket}, packet::SpaceId
+    ConnectionId, EcnCounts, Instant,
+    connection::{PathData, SentPacket},
+    packet::SpaceId,
 };
 
 /// Shareable handle to a single qlog output stream
@@ -181,7 +183,7 @@ impl QlogSink {
     ) {
         #[cfg(feature = "qlog")]
         {
-            use qlog::events::quic::{CongestionStateUpdated,  CongestionStateUpdatedTrigger};
+            use qlog::events::quic::{CongestionStateUpdated, CongestionStateUpdatedTrigger};
 
             let Some(stream) = self.stream.as_ref() else {
                 return;
@@ -203,13 +205,13 @@ impl QlogSink {
 
     pub(super) fn emit_ecn_event(
         &self,
-        diff: EcnCounts,
+        increment: EcnCounts,
         now: Instant,
         orig_rem_cid: ConnectionId,
     ) {
         #[cfg(feature = "qlog")]
         {
-            use qlog::events::quic::{CongestionStateUpdated,  CongestionStateUpdatedTrigger};
+            use qlog::events::quic::{CongestionStateUpdated, CongestionStateUpdatedTrigger};
 
             let Some(stream) = self.stream.as_ref() else {
                 return;
@@ -217,7 +219,7 @@ impl QlogSink {
 
             let event = CongestionStateUpdated {
                 old: None,
-                new: format!("ECN,d_ect1={},d_ce={}", diff.ect1, diff.ce),
+                new: format!("ECN,d_ect1={},d_ce={}", increment.ect1, increment.ce),
                 trigger: Some(CongestionStateUpdatedTrigger::Ecn),
             };
 

@@ -1,7 +1,7 @@
 //! Logic for controlling the rate at which data is sent
 
-use crate::{Instant, frame::EcnCounts};
 use crate::connection::RttEstimator;
+use crate::{Instant, frame::EcnCounts};
 use std::any::Any;
 use std::sync::Arc;
 
@@ -60,8 +60,15 @@ pub trait Controller: Send + Sync {
         is_persistent_congestion: bool,
         is_ecn: bool,
         lost_bytes: u64,
-        diff: EcnCounts,
+        increment: EcnCounts,
     );
+
+    /// ECN counter increments were observed
+    ///
+    /// `increment` the increment of ECN counters compared to its value prior to the most recent ACK.
+    /// It is assumed that `increment` has at least one non-zero value (for ECT(0), ECT(1) or CE).
+    #[allow(unused_variables)]
+    fn on_ecn_delivery(&mut self, now: Instant, increment: EcnCounts) {}
 
     /// Packets were incorrectly deemed lost
     ///
@@ -74,6 +81,10 @@ pub trait Controller: Send + Sync {
 
     /// Externally set the CWND size
     fn set_window(&mut self, size: u64);
+
+    /// Externally set the slow start threshold size
+    #[allow(unused_variables)]
+    fn set_ssthresh(&mut self, size: u64) {}
 
     /// Number of ack-eliciting bytes that may be in flight
     fn window(&self) -> u64;
@@ -95,11 +106,15 @@ pub trait Controller: Send + Sync {
 
     /// Assures the controller that using ECT(0) is supported and enabled by the endpoint.
     /// Returns whether the controller supports and agrees to handle ECT(0) packets accordingly.
-    fn enable_ect0(&mut self) -> bool { true }
+    fn enable_ect0(&mut self) -> bool {
+        true
+    }
 
     /// Assures the controller that using ECT(1) is supported and enabled by the endpoint.
     /// Returns whether the controller supports and agrees to handle ECT(1) packets accordingly.
-    fn enable_ect1(&mut self) -> bool { false }
+    fn enable_ect1(&mut self) -> bool {
+        false
+    }
 
     /// Returns Self for use in down-casting to extract implementation details
     fn into_any(self: Box<Self>) -> Box<dyn Any>;

@@ -115,6 +115,10 @@ impl Controller for NewReno {
         self.window = size;
     }
 
+    fn set_ssthresh(&mut self, size: u64) {
+        self.ssthresh = size;
+    }
+
     fn window(&self) -> u64 {
         self.window
     }

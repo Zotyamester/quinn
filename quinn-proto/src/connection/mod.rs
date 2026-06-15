@@ -1630,25 +1630,26 @@ impl Connection {
                 // future attempts to use ECN on new paths.
                 self.spaces[space].ecn_feedback = frame::EcnCounts::ZERO;
             }
-            Ok(diff) if diff.ce > 0 => {
-                debug!(
-                    "ECN counter increments: ECT(1) = {}, CE = {}",
-                    diff.ect1, diff.ce
-                );
-                self.stats.path.congestion_events += 1;
-                self.path.congestion.on_congestion_event(
-                    now,
-                    largest_sent_time,
-                    false,
-                    true,
-                    0,
-                    diff,
-                );
-                self.config.qlog_sink.emit_ecn_event(
-                    diff,
-                    now,
-                    self.orig_rem_cid,
-                );
+            Ok(increment) if increment.ect1 > 0 || increment.ect0 > 0 || increment.ce > 0 => {
+                self.path.congestion.on_ecn_delivery(now, increment);
+                if increment.ce > 0 {
+                    debug!(
+                        "ECN counter increments: ECT(1) = {}, CE = {}",
+                        increment.ect1, increment.ce
+                    );
+                    self.stats.path.congestion_events += 1;
+                    self.path.congestion.on_congestion_event(
+                        now,
+                        largest_sent_time,
+                        false,
+                        true,
+                        0,
+                        increment,
+                    );
+                    self.config
+                        .qlog_sink
+                        .emit_ecn_event(increment, now, self.orig_rem_cid);
+                }
             }
             _ => {}
         }
@@ -1873,11 +1874,9 @@ impl Connection {
                     size_of_lost_packets,
                     frame::EcnCounts::ZERO,
                 );
-                self.config.qlog_sink.emit_loss_event(
-                    size_of_lost_packets,
-                    now,
-                    self.orig_rem_cid,
-                );
+                self.config
+                    .qlog_sink
+                    .emit_loss_event(size_of_lost_packets, now, self.orig_rem_cid);
             }
         }
 

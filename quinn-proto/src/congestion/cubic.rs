@@ -259,6 +259,10 @@ impl Controller for Cubic {
         self.state.window = size;
     }
 
+    fn set_ssthresh(&mut self, size: u64) {
+        self.state.ssthresh = size;
+    }
+
     fn window(&self) -> u64 {
         self.state.window
     }
