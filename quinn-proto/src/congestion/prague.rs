@@ -8,7 +8,7 @@ use crate::congestion::{Cubic, CubicConfig};
 use crate::connection::RttEstimator;
 use crate::frame::EcnCounts;
 
-/// A simple, standard congestion controller
+/// A port of the Prague congestion controller to Quinn
 #[derive(Debug, Clone)]
 pub struct Prague {
     controller: Cubic,
@@ -100,14 +100,14 @@ impl Controller for Prague {
     }
 
     fn on_ecn_delivery(&mut self, now: Instant, increment: EcnCounts) {
-        if !self.ect1_enabled || !(increment.ect1 == 0 && increment.ce == 0) {
+        if !self.ect1_enabled || (increment.ect1 == 0 && increment.ce == 0) {
             return; // Not an event that concerns an L4S controller such as Prague
         }
         if let Some(alpha) = self.alpha {
             self.ect_count += increment.ect1 as f64;
             self.ce_count += increment.ce as f64;
             if now.saturating_duration_since(self.last_alpha_update) > self.rtt_virt {
-                let frac = self.ce_count / (self.ce_count + self.ect_count);
+                let frac: f64 = self.ce_count / (self.ce_count + self.ect_count);
                 self.alpha = Some((1.0 - Prague::EWMA_GAIN) * alpha + Prague::EWMA_GAIN * frac);
                 self.last_alpha_update = now;
                 self.ect_count = 0.0;
@@ -168,7 +168,7 @@ impl Controller for Prague {
             return;
         }
 
-        // 2. Handle pure ECN congestion event (diff.ce > 0).
+        // Handle pure ECN congestion event (diff.ce > 0).
         if is_ecn && increment.ce > 0 {
             // Limit ECN window reduction to at most once per virtual RTT.
             // This is necessary to satisfy 2.4.2. Multiplicative Decrease on ECN Feedback (draft-briscoe-iccrg-prague-congestion-control-04) stating
@@ -205,11 +205,16 @@ impl Controller for Prague {
                 let new_cwnd = original_cwnd.saturating_sub(prague_reduction);
                 self.controller.set_window(new_cwnd);
                 self.controller.set_ssthresh(new_cwnd);
+                self.controller.exit_recovery(now);
 
                 // Record the reduction details.
                 self.last_ecn_reduction = Some((now, prague_reduction));
             }
         }
+    }
+
+    fn exit_recovery(&mut self, now: Instant) {
+        self.controller.exit_recovery(now);
     }
 
     fn on_mtu_update(&mut self, new_mtu: u16) {
@@ -288,6 +293,10 @@ mod tests {
         let initial_cwnd = prague.window();
         assert!(initial_cwnd > 0);
 
+        println!("Before enable_ect1: ect1_enabled = {}", prague.ect1_enabled);
+        prague.enable_ect1();
+        println!("After enable_ect1: ect1_enabled = {}", prague.ect1_enabled);
+
         // 2. Process first ECN CE mark.
         // In production, the connection calls both `on_ecn_delivery` and `on_congestion_event`.
         let increment = EcnCounts {
@@ -296,11 +305,30 @@ mod tests {
             ce: 1,
         };
         prague.on_ecn_delivery(now, increment);
+        println!("After on_ecn_delivery: alpha = {:?}", prague.alpha);
         prague.on_congestion_event(now, now, false, true, 0, increment);
 
         let cwnd_after_first = prague.window();
         assert_eq!(prague.alpha, Some(1.0));
         assert!(cwnd_after_first < initial_cwnd);
+
+        // Verify that recovery was exited and normal ACK processing is not blocked.
+        let rtt = RttEstimator::new(Duration::from_millis(50));
+        // Force slow start to make window growth on ACK immediate and large.
+        prague.set_ssthresh(u64::MAX);
+        prague.on_ack(
+            now + Duration::from_millis(10),
+            now, // packet sent at `now`
+            50000,
+            false,
+            &rtt,
+        );
+        assert!(prague.window() > cwnd_after_first);
+
+        // Restore the window and ssthresh for the rest of the test
+        prague.set_window(cwnd_after_first);
+        prague.set_ssthresh(cwnd_after_first);
+
         assert!(
             prague
                 .last_ecn_reduction

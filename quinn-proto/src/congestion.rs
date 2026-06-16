@@ -76,6 +76,12 @@ pub trait Controller: Send + Sync {
     /// of packet reordering) are acknowledged after the congestion event was raised.
     fn on_spurious_congestion_event(&mut self) {}
 
+    /// Exit recovery/loss state
+    ///
+    /// This allows a controller to resume normal congestion window growth immediately.
+    #[allow(unused_variables)]
+    fn exit_recovery(&mut self, now: Instant) {}
+
     /// The known MTU for the current network path has been updated
     fn on_mtu_update(&mut self, new_mtu: u16);
 

@@ -250,6 +250,10 @@ impl Controller for Cubic {
         }
     }
 
+    fn exit_recovery(&mut self, _now: Instant) {
+        self.state.recovery_start_time = None;
+    }
+
     fn on_mtu_update(&mut self, new_mtu: u16) {
         self.current_mtu = new_mtu as u64;
         self.state.window = self.state.window.max(self.minimum_window());

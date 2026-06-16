@@ -106,6 +106,12 @@ impl Controller for NewReno {
         }
     }
 
+    fn exit_recovery(&mut self, now: Instant) {
+        self.recovery_start_time = now
+            .checked_sub(std::time::Duration::from_secs(3600))
+            .unwrap_or(now);
+    }
+
     fn on_mtu_update(&mut self, new_mtu: u16) {
         self.current_mtu = new_mtu as u64;
         self.window = self.window.max(self.minimum_window());
