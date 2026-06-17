@@ -191,7 +191,7 @@ impl QlogSink {
 
             let event = CongestionStateUpdated {
                 old: None,
-                new: format!("LOSS,size_of_loss={}", size_of_lost_packets),
+                new: format!("LOSS:size_of_lost_packets={}", size_of_lost_packets),
                 trigger: Some(CongestionStateUpdatedTrigger::Unknown),
             };
 
@@ -219,7 +219,10 @@ impl QlogSink {
 
             let event = CongestionStateUpdated {
                 old: None,
-                new: format!("ECN,d_ect1={},d_ce={}", increment.ect1, increment.ce),
+                new: format!(
+                    "ECN:ect0+={},ect1+={},ce+={}",
+                    increment.ect0, increment.ect1, increment.ce
+                ),
                 trigger: Some(CongestionStateUpdatedTrigger::Ecn),
             };
 
@@ -228,6 +231,33 @@ impl QlogSink {
                 EventData::QuicCongestionStateUpdated(event),
                 now,
             );
+        }
+    }
+
+    pub(super) fn emit_ecn_state_update(
+        &self,
+        ecn_capable: bool,
+        now: Instant,
+        orig_rem_cid: ConnectionId,
+    ) {
+        #[cfg(feature = "qlog")]
+        {
+            use qlog::events::quic::{EcnState, EcnStateUpdated};
+
+            let Some(stream) = self.stream.as_ref() else {
+                return;
+            };
+
+            let event = EcnStateUpdated {
+                old: None,
+                new: if ecn_capable {
+                    EcnState::Capable
+                } else {
+                    EcnState::Failed
+                },
+            };
+
+            stream.emit_event(orig_rem_cid, EventData::QuicEcnStateUpdated(event), now);
         }
     }
 }

@@ -1565,6 +1565,9 @@ impl Connection {
                 // We sent out packets marked with ECN, so any ack that doesn't acknowledge it disables it.
                 debug!("ECN not acknowledged by peer");
                 self.path.using_ecn = false;
+                self.config
+                    .qlog_sink
+                    .emit_ecn_state_update(false, now, self.orig_rem_cid);
             }
         }
 
@@ -1622,10 +1625,13 @@ impl Connection {
         match self.spaces[space].detect_ecn(newly_acked_ect0, newly_acked_ect1, ecn) {
             Err(e) => {
                 debug!("halting ECN due to verification failure: {}", e);
-                self.path.using_ecn = false; // NOTE: negotation may not be completely necessary,
-                // since this and another check essentially disables
-                // the use of ECN in case there's no ECN-echoing or
-                // if the echoing peer is faulty
+                // NOTE: negotation may not be completely necessary, since this and another check essentially
+                // disables the use of ECN in case there's no ECN-echoing or if the echoing peer is faulty.
+                self.path.using_ecn = false;
+                self.config
+                    .qlog_sink
+                    .emit_ecn_state_update(false, now, self.orig_rem_cid);
+
                 // Wipe out the existing value because it might be garbage and could interfere with
                 // future attempts to use ECN on new paths.
                 self.spaces[space].ecn_feedback = frame::EcnCounts::ZERO;
