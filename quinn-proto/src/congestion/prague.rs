@@ -4,14 +4,14 @@ use std::time::Duration;
 
 use super::{Controller, ControllerFactory};
 use crate::Instant;
-use crate::congestion::{Cubic, CubicConfig};
+use crate::congestion::{NewReno, NewRenoConfig};
 use crate::connection::RttEstimator;
 use crate::frame::EcnCounts;
 
 /// A port of the Prague congestion controller to Quinn
 #[derive(Debug, Clone)]
 pub struct Prague {
-    controller: Cubic,
+    controller: NewReno,
     ect1_enabled: bool,
     ect_count: f64,
     ce_count: f64,
@@ -32,11 +32,11 @@ impl Prague {
 
     /// Construct a state using the given `config` and current time `now`
     pub fn new(_config: Arc<PragueConfig>, now: Instant, current_mtu: u16) -> Self {
-        let cubic_config = Arc::new(CubicConfig::default());
-        let cubic = Cubic::new(cubic_config, now, current_mtu);
+        let reno_config = Arc::new(NewRenoConfig::default());
+        let reno = NewReno::new(reno_config, now, current_mtu);
 
         Self {
-            controller: cubic,
+            controller: reno,
             ect1_enabled: false,
             ect_count: 0.0,
             ce_count: 0.0,
@@ -297,6 +297,8 @@ mod tests {
         prague.enable_ect1();
         println!("After enable_ect1: ect1_enabled = {}", prague.ect1_enabled);
 
+        let event_time = now + Duration::from_millis(1);
+
         // 2. Process first ECN CE mark.
         // In production, the connection calls both `on_ecn_delivery` and `on_congestion_event`.
         let increment = EcnCounts {
@@ -304,9 +306,9 @@ mod tests {
             ect1: 10,
             ce: 1,
         };
-        prague.on_ecn_delivery(now, increment);
+        prague.on_ecn_delivery(event_time, increment);
         println!("After on_ecn_delivery: alpha = {:?}", prague.alpha);
-        prague.on_congestion_event(now, now, false, true, 0, increment);
+        prague.on_congestion_event(event_time, event_time, false, true, 0, increment);
 
         let cwnd_after_first = prague.window();
         assert_eq!(prague.alpha, Some(1.0));
@@ -317,8 +319,8 @@ mod tests {
         // Force slow start to make window growth on ACK immediate and large.
         prague.set_ssthresh(u64::MAX);
         prague.on_ack(
-            now + Duration::from_millis(10),
-            now, // packet sent at `now`
+            event_time + Duration::from_millis(10),
+            event_time, // packet sent at `event_time`
             50000,
             false,
             &rtt,
@@ -332,7 +334,7 @@ mod tests {
         assert!(
             prague
                 .last_ecn_reduction
-                .is_some_and(|(time, _)| time == now)
+                .is_some_and(|(time, _)| time == event_time)
         );
 
         // 3. Process another ECN CE mark within cooldown (within 25ms).
@@ -342,10 +344,10 @@ mod tests {
             ect1: 5,
             ce: 1,
         };
-        prague.on_ecn_delivery(now + Duration::from_millis(10), diff_cooldown);
+        prague.on_ecn_delivery(event_time + Duration::from_millis(10), diff_cooldown);
         prague.on_congestion_event(
-            now + Duration::from_millis(10),
-            now + Duration::from_millis(10),
+            event_time + Duration::from_millis(10),
+            event_time + Duration::from_millis(10),
             false,
             true,
             0,
@@ -355,10 +357,10 @@ mod tests {
 
         // 4. Test loss credit / double dipping prevention.
         // A packet loss occurs within rtt_virt (25ms) of the ECN reduction (e.g., at now + 15ms).
-        // It should undo the ECN reduction and apply the standard Cubic loss reduction.
+        // It should undo the ECN reduction and apply the standard Reno loss reduction.
         prague.on_congestion_event(
-            now + Duration::from_millis(15),
-            now + Duration::from_millis(15),
+            event_time + Duration::from_millis(15),
+            event_time + Duration::from_millis(15),
             false,
             false,
             1000,
@@ -375,14 +377,16 @@ mod tests {
         let mut prague = Prague::new(config, now, 1200);
         prague.enable_ect1();
 
+        let event_time = now + Duration::from_millis(1);
+
         // 1. First ECN mark initializes alpha to 1.0.
         let diff1 = EcnCounts {
             ect0: 0,
             ect1: 9,
             ce: 1,
         };
-        prague.on_ecn_delivery(now, diff1);
-        prague.on_congestion_event(now, now, false, true, 0, diff1);
+        prague.on_ecn_delivery(event_time, diff1);
+        prague.on_congestion_event(event_time, event_time, false, true, 0, diff1);
         assert_eq!(prague.alpha, Some(1.0));
 
         // 2. We process ECN ACKs over time.
@@ -394,10 +398,10 @@ mod tests {
             ect1: 9,
             ce: 1,
         };
-        prague.on_ecn_delivery(now + Duration::from_millis(30), diff2);
+        prague.on_ecn_delivery(event_time + Duration::from_millis(30), diff2);
         prague.on_congestion_event(
-            now + Duration::from_millis(30),
-            now + Duration::from_millis(30),
+            event_time + Duration::from_millis(30),
+            event_time + Duration::from_millis(30),
             false,
             true,
             0,
