@@ -100,6 +100,9 @@ pub struct TransportConfig {
     pub(crate) ecn_mode: EcnMode,
     pub(crate) congestion_controller_factory: Arc<dyn congestion::ControllerFactory + Send + Sync>,
 
+    pub(crate) initial_window: Option<u64>,
+    pub(crate) skip_slow_start: bool,
+
     pub(crate) enable_segmentation_offload: bool,
 
     pub(crate) qlog_sink: QlogSink,
@@ -391,6 +394,20 @@ impl TransportConfig {
         self
     }
 
+    /// Set the initial congestion window in bytes.
+    ///
+    /// If not specified, the default for the selected congestion controller will be used.
+    pub fn initial_window(&mut self, value: u64) -> &mut Self {
+        self.initial_window = Some(value);
+        self
+    }
+
+    /// Set whether to skip the slow start phase.
+    pub fn skip_slow_start(&mut self, value: bool) -> &mut Self {
+        self.skip_slow_start = value;
+        self
+    }
+
     /// Whether to use "Generic Segmentation Offload" to accelerate transmits, when supported by the
     /// environment
     ///
@@ -454,6 +471,9 @@ impl Default for TransportConfig {
             ecn_mode: EcnMode::Classic,
             congestion_controller_factory: Arc::new(congestion::CubicConfig::default()),
 
+            initial_window: None,
+            skip_slow_start: false,
+
             enable_segmentation_offload: true,
 
             qlog_sink: QlogSink::default(),
@@ -490,6 +510,8 @@ impl fmt::Debug for TransportConfig {
                 deterministic_packet_numbers: _,
             ecn_mode,
             congestion_controller_factory: _,
+            initial_window,
+            skip_slow_start,
             enable_segmentation_offload,
             qlog_sink,
         } = self;
@@ -525,6 +547,8 @@ impl fmt::Debug for TransportConfig {
             .field("datagram_send_buffer_size", datagram_send_buffer_size)
             .field("ecn_mode", ecn_mode)
             // congestion_controller_factory not debug
+            .field("initial_window", initial_window)
+            .field("skip_slow_start", skip_slow_start)
             .field("enable_segmentation_offload", enable_segmentation_offload);
         if cfg!(feature = "qlog") {
             s.field("qlog_stream", &qlog_sink.is_enabled());

@@ -2,7 +2,7 @@ use std::any::Any;
 use std::sync::Arc;
 use std::time::Duration;
 
-use super::{Controller, ControllerFactory};
+use super::{Controller, ControllerFactory, BASE_DATAGRAM_SIZE};
 use crate::Instant;
 use crate::congestion::{NewReno, NewRenoConfig};
 use crate::connection::RttEstimator;
@@ -261,18 +261,48 @@ impl Controller for Prague {
 
 /// Configuration for the `Prague` congestion controller
 #[derive(Debug, Clone)]
-pub struct PragueConfig {}
+pub struct PragueConfig {
+    pub(crate) initial_window: u64,
+    pub(crate) skip_slow_start: bool,
+}
 
-impl PragueConfig {}
+impl PragueConfig {
+    /// Default limit on the amount of outstanding data in bytes.
+    pub fn initial_window(&mut self, value: u64) -> &mut Self {
+        self.initial_window = value;
+        self
+    }
+
+    /// Whether to skip the slow start phase.
+    pub fn skip_slow_start(&mut self, value: bool) -> &mut Self {
+        self.skip_slow_start = value;
+        self
+    }
+}
 
 impl Default for PragueConfig {
     fn default() -> Self {
-        Self {}
+        Self {
+            initial_window: 14720.clamp(2 * BASE_DATAGRAM_SIZE, 10 * BASE_DATAGRAM_SIZE),
+            skip_slow_start: false,
+        }
     }
 }
 
 impl ControllerFactory for PragueConfig {
-    fn build(self: Arc<Self>, now: Instant, current_mtu: u16) -> Box<dyn Controller> {
-        Box::new(Prague::new(self, now, current_mtu))
+    fn build(
+        self: Arc<Self>,
+        now: Instant,
+        current_mtu: u16,
+        config: &crate::TransportConfig,
+    ) -> Box<dyn Controller> {
+        let mut prague = Prague::new(self.clone(), now, current_mtu);
+        if let Some(initial_window) = config.initial_window {
+            prague.set_window(initial_window);
+        }
+        if config.skip_slow_start || self.skip_slow_start {
+            prague.set_ssthresh(prague.window());
+        }
+        Box::new(prague)
     }
 }

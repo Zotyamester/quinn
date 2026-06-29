@@ -3650,3 +3650,26 @@ fn handshake_confirmation_no_resumption_shortcut() {
     );
     assert_matches!(pair.client_conn_mut(ch).poll(), None);
 }
+
+#[test]
+fn custom_cca_settings() {
+    let _guard = subscribe();
+    let mut pair = Pair::default();
+
+    let mut transport = TransportConfig::default();
+    transport.initial_window(25000);
+    transport.skip_slow_start(true);
+
+    let mut client_cfg = client_config();
+    client_cfg.transport = Arc::new(transport);
+
+    let client_ch = pair.begin_connect(client_cfg);
+    pair.drive();
+
+    let conn = pair.client_conn_mut(client_ch);
+    let cong = conn.congestion_state();
+
+    assert_eq!(cong.initial_window(), 25000);
+    assert_eq!(cong.metrics().congestion_window, 25000);
+    assert_eq!(cong.metrics().ssthresh, Some(25000));
+}

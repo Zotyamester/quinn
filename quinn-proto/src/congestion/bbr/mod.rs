@@ -62,9 +62,9 @@ pub struct Bbr {
 
 impl Bbr {
     /// Construct a state using the given `config` and current time `now`
-    pub fn new(config: Arc<BbrConfig>, current_mtu: u16) -> Self {
+    pub fn new(config: Arc<BbrConfig>, now: Instant, current_mtu: u16) -> Self {
         let initial_window = config.initial_window;
-        Self {
+        let mut bbr = Self {
             config,
             current_mtu: current_mtu as u64,
             max_bandwidth: BandwidthEstimation::default(),
@@ -99,7 +99,25 @@ impl Bbr {
             round_wo_bw_gain: 0,
             ack_aggregation: AckAggregationState::default(),
             random_number_generator: rand::rngs::StdRng::from_os_rng(),
+        };
+
+        if bbr.config.skip_slow_start {
+            bbr.mode = Mode::ProbeBw;
+            bbr.cwnd_gain = K_DERIVED_HIGH_CWNDGAIN;
+            bbr.last_cycle_start = Some(now);
+            // Pick a random offset for the gain cycle out of {0, 2..7} range.
+            let mut rand_index = bbr
+                .random_number_generator
+                .random_range(0..K_PACING_GAIN.len() as u8 - 1);
+            if rand_index >= 1 {
+                rand_index += 1;
+            }
+            bbr.current_cycle_offset = rand_index;
+            bbr.pacing_gain = K_PACING_GAIN[rand_index as usize];
+            bbr.is_at_full_bandwidth = true;
         }
+
+        bbr
     }
 
     fn enter_startup_mode(&mut self) {
@@ -510,7 +528,7 @@ impl Controller for Bbr {
     }
 
     fn initial_window(&self) -> u64 {
-        self.config.initial_window
+        self.init_cwnd
     }
 
     fn into_any(self: Box<Self>) -> Box<dyn Any> {
@@ -522,6 +540,7 @@ impl Controller for Bbr {
 #[derive(Debug, Clone)]
 pub struct BbrConfig {
     initial_window: u64,
+    pub(crate) skip_slow_start: bool,
 }
 
 impl BbrConfig {
@@ -532,19 +551,51 @@ impl BbrConfig {
         self.initial_window = value;
         self
     }
+
+    /// Whether to skip the slow start phase.
+    pub fn skip_slow_start(&mut self, value: bool) -> &mut Self {
+        self.skip_slow_start = value;
+        self
+    }
 }
 
 impl Default for BbrConfig {
     fn default() -> Self {
         Self {
             initial_window: K_MAX_INITIAL_CONGESTION_WINDOW * BASE_DATAGRAM_SIZE,
+            skip_slow_start: false,
         }
     }
 }
 
 impl ControllerFactory for BbrConfig {
-    fn build(self: Arc<Self>, _now: Instant, current_mtu: u16) -> Box<dyn Controller> {
-        Box::new(Bbr::new(self, current_mtu))
+    fn build(
+        self: Arc<Self>,
+        now: Instant,
+        current_mtu: u16,
+        config: &crate::TransportConfig,
+    ) -> Box<dyn Controller> {
+        let mut bbr = Bbr::new(self.clone(), now, current_mtu);
+        if let Some(initial_window) = config.initial_window {
+            bbr.init_cwnd = initial_window;
+            bbr.cwnd = initial_window;
+        }
+        if config.skip_slow_start || self.skip_slow_start {
+            bbr.mode = Mode::ProbeBw;
+            bbr.cwnd_gain = K_DERIVED_HIGH_CWNDGAIN;
+            bbr.last_cycle_start = Some(now);
+            // Pick a random offset for the gain cycle out of {0, 2..7} range.
+            let mut rand_index = bbr
+                .random_number_generator
+                .random_range(0..K_PACING_GAIN.len() as u8 - 1);
+            if rand_index >= 1 {
+                rand_index += 1;
+            }
+            bbr.current_cycle_offset = rand_index;
+            bbr.pacing_gain = K_PACING_GAIN[rand_index as usize];
+            bbr.is_at_full_bandwidth = true;
+        }
+        Box::new(bbr)
     }
 }
 

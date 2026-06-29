@@ -11,11 +11,12 @@ use crate::frame::EcnCounts;
 pub struct NewReno {
     config: Arc<NewRenoConfig>,
     current_mtu: u64,
+    pub(crate) initial_window: u64,
     /// Maximum number of bytes in flight that may be sent.
-    window: u64,
+    pub(crate) window: u64,
     /// Slow start threshold in bytes. When the congestion window is below ssthresh, the mode is
     /// slow start and the window grows by the number of bytes acknowledged.
-    ssthresh: u64,
+    pub(crate) ssthresh: u64,
     /// The time when QUIC first detects a loss, causing it to enter recovery. When a packet sent
     /// after this time is acknowledged, QUIC exits recovery.
     recovery_start_time: Instant,
@@ -27,6 +28,7 @@ impl NewReno {
     /// Construct a state using the given `config` and current time `now`
     pub fn new(config: Arc<NewRenoConfig>, now: Instant, current_mtu: u16) -> Self {
         Self {
+            initial_window: config.initial_window,
             window: config.initial_window,
             ssthresh: u64::MAX,
             recovery_start_time: now,
@@ -142,7 +144,7 @@ impl Controller for NewReno {
     }
 
     fn initial_window(&self) -> u64 {
-        self.config.initial_window
+        self.initial_window
     }
 
     fn into_any(self: Box<Self>) -> Box<dyn Any> {
@@ -155,6 +157,7 @@ impl Controller for NewReno {
 pub struct NewRenoConfig {
     initial_window: u64,
     loss_reduction_factor: f32,
+    pub(crate) skip_slow_start: bool,
 }
 
 impl NewRenoConfig {
@@ -171,6 +174,12 @@ impl NewRenoConfig {
         self.loss_reduction_factor = value;
         self
     }
+
+    /// Whether to skip the slow start phase.
+    pub fn skip_slow_start(&mut self, value: bool) -> &mut Self {
+        self.skip_slow_start = value;
+        self
+    }
 }
 
 impl Default for NewRenoConfig {
@@ -178,12 +187,25 @@ impl Default for NewRenoConfig {
         Self {
             initial_window: 14720.clamp(2 * BASE_DATAGRAM_SIZE, 10 * BASE_DATAGRAM_SIZE),
             loss_reduction_factor: 0.5,
+            skip_slow_start: false,
         }
     }
 }
 
 impl ControllerFactory for NewRenoConfig {
-    fn build(self: Arc<Self>, now: Instant, current_mtu: u16) -> Box<dyn Controller> {
-        Box::new(NewReno::new(self, now, current_mtu))
+    fn build(
+        self: Arc<Self>,
+        now: Instant,
+        current_mtu: u16,
+        config: &crate::TransportConfig,
+    ) -> Box<dyn Controller> {
+        let mut reno = NewReno::new(self.clone(), now, current_mtu);
+        if let Some(initial_window) = config.initial_window {
+            reno.window = initial_window;
+        }
+        if config.skip_slow_start || self.skip_slow_start {
+            reno.ssthresh = reno.window;
+        }
+        Box::new(reno)
     }
 }

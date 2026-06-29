@@ -86,6 +86,12 @@ pub struct CommonOpt {
     /// 1MiB, 10G will limit to 10GiB.
     #[clap(long, value_parser = parse_byte_size)]
     pub send_window: Option<u64>,
+    /// Congestion control initial window size (in bytes, supports suffixes like 12k, 1M)
+    #[clap(long, alias = "initial-cwnd", value_parser = parse_byte_size)]
+    pub initial_window: Option<u64>,
+    /// Skip the slow start phase (if the CCA includes such a phase)
+    #[clap(long)]
+    pub skip_slow_start: bool,
     /// Max UDP payload size in bytes
     #[clap(long, default_value = "1472")]
     pub max_udp_payload_size: u16,
@@ -127,6 +133,14 @@ impl CommonOpt {
 
         if let Some(send_window) = self.send_window {
             transport.send_window(send_window);
+        }
+
+        if let Some(initial_window) = self.initial_window {
+            transport.initial_window(initial_window);
+        }
+
+        if self.skip_slow_start {
+            transport.skip_slow_start(true);
         }
 
         transport.enable_ecn(self.ecn.into());

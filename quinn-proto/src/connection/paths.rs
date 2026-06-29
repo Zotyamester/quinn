@@ -72,7 +72,7 @@ impl PathData {
         let mut congestion = config
             .congestion_controller_factory
             .clone()
-            .build(now, config.get_initial_mtu());
+            .build(now, config.get_initial_mtu(), config);
         let ecn_mode = config.ecn_mode.supported_mode(&mut congestion);
         Self {
             remote,
@@ -160,7 +160,7 @@ impl PathData {
         self.congestion = config
             .congestion_controller_factory
             .clone()
-            .build(now, config.get_initial_mtu());
+            .build(now, config.get_initial_mtu(), config);
         self.mtud.reset(config.get_initial_mtu(), config.min_mtu);
     }
 

@@ -81,6 +81,7 @@ impl State {
 pub struct Cubic {
     config: Arc<CubicConfig>,
     current_mtu: u64,
+    pub(crate) initial_window: u64,
     state: State,
     /// Whether handling of ECN (specifically, ECT(0)) is allowed.
     allow_ecn: bool,
@@ -92,6 +93,7 @@ impl Cubic {
     /// Construct a state using the given `config` and current time `now`
     pub fn new(config: Arc<CubicConfig>, _now: Instant, current_mtu: u16) -> Self {
         Self {
+            initial_window: config.initial_window,
             state: State {
                 window: config.initial_window,
                 ssthresh: u64::MAX,
@@ -294,7 +296,7 @@ if (size as f64) < self.state.w_max {
     }
 
     fn initial_window(&self) -> u64 {
-        self.config.initial_window
+        self.initial_window
     }
 
     fn enable_ect0(&mut self) -> bool {
@@ -311,6 +313,7 @@ if (size as f64) < self.state.w_max {
 #[derive(Debug, Clone)]
 pub struct CubicConfig {
     initial_window: u64,
+    pub(crate) skip_slow_start: bool,
 }
 
 impl CubicConfig {
@@ -321,19 +324,39 @@ impl CubicConfig {
         self.initial_window = value;
         self
     }
+
+    /// Whether to skip the slow start phase.
+    pub fn skip_slow_start(&mut self, value: bool) -> &mut Self {
+        self.skip_slow_start = value;
+        self
+    }
 }
 
 impl Default for CubicConfig {
     fn default() -> Self {
         Self {
             initial_window: 14720.clamp(2 * BASE_DATAGRAM_SIZE, 10 * BASE_DATAGRAM_SIZE),
+            skip_slow_start: false,
         }
     }
 }
 
 impl ControllerFactory for CubicConfig {
-    fn build(self: Arc<Self>, now: Instant, current_mtu: u16) -> Box<dyn Controller> {
-        Box::new(Cubic::new(self, now, current_mtu))
+    fn build(
+        self: Arc<Self>,
+        now: Instant,
+        current_mtu: u16,
+        config: &crate::TransportConfig,
+    ) -> Box<dyn Controller> {
+        let mut cubic = Cubic::new(self.clone(), now, current_mtu);
+        if let Some(initial_window) = config.initial_window {
+            cubic.initial_window = initial_window;
+            cubic.state.window = initial_window;
+        }
+        if config.skip_slow_start || self.skip_slow_start {
+            cubic.state.ssthresh = cubic.state.window;
+        }
+        Box::new(cubic)
     }
 }
 #[cfg(test)]
