@@ -92,6 +92,9 @@ pub struct CommonOpt {
     /// Skip the slow start phase (if the CCA includes such a phase)
     #[clap(long)]
     pub skip_slow_start: bool,
+    /// Ignore Explicit Congestion Notification (ECN) marks until the first packet loss (supported by Prague)
+    #[clap(long)]
+    pub ignore_ecn_until_loss: bool,
     /// Max UDP payload size in bytes
     #[clap(long, default_value = "1472")]
     pub max_udp_payload_size: u16,
@@ -141,6 +144,10 @@ impl CommonOpt {
 
         if self.skip_slow_start {
             transport.skip_slow_start(true);
+        }
+
+        if self.ignore_ecn_until_loss {
+            transport.ignore_ecn_until_loss(true);
         }
 
         transport.enable_ecn(self.ecn.into());

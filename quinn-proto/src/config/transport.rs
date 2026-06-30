@@ -102,6 +102,7 @@ pub struct TransportConfig {
 
     pub(crate) initial_window: Option<u64>,
     pub(crate) skip_slow_start: bool,
+    pub(crate) ignore_ecn_until_loss: bool,
 
     pub(crate) enable_segmentation_offload: bool,
 
@@ -408,6 +409,12 @@ impl TransportConfig {
         self
     }
 
+    /// Set whether to ignore Explicit Congestion Notification (ECN) marks until the first packet loss.
+    pub fn ignore_ecn_until_loss(&mut self, value: bool) -> &mut Self {
+        self.ignore_ecn_until_loss = value;
+        self
+    }
+
     /// Whether to use "Generic Segmentation Offload" to accelerate transmits, when supported by the
     /// environment
     ///
@@ -473,6 +480,7 @@ impl Default for TransportConfig {
 
             initial_window: None,
             skip_slow_start: false,
+            ignore_ecn_until_loss: false,
 
             enable_segmentation_offload: true,
 
@@ -512,6 +520,7 @@ impl fmt::Debug for TransportConfig {
             congestion_controller_factory: _,
             initial_window,
             skip_slow_start,
+            ignore_ecn_until_loss,
             enable_segmentation_offload,
             qlog_sink,
         } = self;
@@ -549,6 +558,7 @@ impl fmt::Debug for TransportConfig {
             // congestion_controller_factory not debug
             .field("initial_window", initial_window)
             .field("skip_slow_start", skip_slow_start)
+            .field("ignore_ecn_until_loss", ignore_ecn_until_loss)
             .field("enable_segmentation_offload", enable_segmentation_offload);
         if cfg!(feature = "qlog") {
             s.field("qlog_stream", &qlog_sink.is_enabled());

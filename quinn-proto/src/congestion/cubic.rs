@@ -79,7 +79,7 @@ impl State {
 /// The RFC8312 congestion controller, as widely used for TCP
 #[derive(Debug, Clone)]
 pub struct Cubic {
-    config: Arc<CubicConfig>,
+    _config: Arc<CubicConfig>,
     current_mtu: u64,
     pub(crate) initial_window: u64,
     state: State,
@@ -102,7 +102,7 @@ impl Cubic {
             allow_ecn: false,
             current_mtu: current_mtu as u64,
             pre_congestion_state: None,
-            config,
+            _config: config,
         }
     }
 

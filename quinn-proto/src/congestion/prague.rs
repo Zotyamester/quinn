@@ -21,6 +21,8 @@ pub struct Prague {
     last_ecn_reduction: Option<(Instant, u64)>,
     reduce_rtt_dependence: bool,
     connection_start_time: Instant,
+    pub(crate) ignore_ecn_until_loss: bool,
+    pub(crate) has_seen_loss: bool,
 }
 
 impl Prague {
@@ -31,7 +33,7 @@ impl Prague {
     const EWMA_GAIN: f64 = 1.0 / 16.0;
 
     /// Construct a state using the given `config` and current time `now`
-    pub fn new(_config: Arc<PragueConfig>, now: Instant, current_mtu: u16) -> Self {
+    pub fn new(config: Arc<PragueConfig>, now: Instant, current_mtu: u16) -> Self {
         let reno_config = Arc::new(NewRenoConfig::default());
         let reno = NewReno::new(reno_config, now, current_mtu);
 
@@ -46,6 +48,8 @@ impl Prague {
             last_ecn_reduction: None,
             reduce_rtt_dependence: false,
             connection_start_time: now,
+            ignore_ecn_until_loss: config.ignore_ecn_until_loss,
+            has_seen_loss: false,
         }
     }
 }
@@ -103,6 +107,9 @@ impl Controller for Prague {
         if !self.ect1_enabled || (increment.ect1 == 0 && increment.ce == 0) {
             return; // Not an event that concerns an L4S controller such as Prague
         }
+        if self.ignore_ecn_until_loss && !self.has_seen_loss {
+            return;
+        }
         if let Some(alpha) = self.alpha {
             self.ect_count += increment.ect1 as f64;
             self.ce_count += increment.ce as f64;
@@ -145,6 +152,7 @@ impl Controller for Prague {
 
         // Handle Loss (loss-only / ECN+loss).
         if lost_bytes > 0 {
+            self.has_seen_loss = true;
             // Check if we should credit a recent ECN reduction to avoid double-dipping.
             if let Some((last_time, last_reduction_size)) = self.last_ecn_reduction {
                 if now.saturating_duration_since(last_time) < self.rtt_virt {
@@ -170,6 +178,9 @@ impl Controller for Prague {
 
         // Handle pure ECN congestion event (diff.ce > 0).
         if is_ecn && increment.ce > 0 {
+            if self.ignore_ecn_until_loss && !self.has_seen_loss {
+                return;
+            }
             // Limit ECN window reduction to at most once per virtual RTT.
             // This is necessary to satisfy 2.4.2. Multiplicative Decrease on ECN Feedback (draft-briscoe-iccrg-prague-congestion-control-04) stating
             // > the Prague CC [...] only triggers a multiplicative decrease to its congestion window when
@@ -264,6 +275,7 @@ impl Controller for Prague {
 pub struct PragueConfig {
     pub(crate) initial_window: u64,
     pub(crate) skip_slow_start: bool,
+    pub(crate) ignore_ecn_until_loss: bool,
 }
 
 impl PragueConfig {
@@ -278,6 +290,12 @@ impl PragueConfig {
         self.skip_slow_start = value;
         self
     }
+
+    /// Whether to ignore Explicit Congestion Notification (ECN) marks until the first packet loss.
+    pub fn ignore_ecn_until_loss(&mut self, value: bool) -> &mut Self {
+        self.ignore_ecn_until_loss = value;
+        self
+    }
 }
 
 impl Default for PragueConfig {
@@ -285,6 +303,7 @@ impl Default for PragueConfig {
         Self {
             initial_window: 14720.clamp(2 * BASE_DATAGRAM_SIZE, 10 * BASE_DATAGRAM_SIZE),
             skip_slow_start: false,
+            ignore_ecn_until_loss: false,
         }
     }
 }
@@ -297,6 +316,7 @@ impl ControllerFactory for PragueConfig {
         config: &crate::TransportConfig,
     ) -> Box<dyn Controller> {
         let mut prague = Prague::new(self.clone(), now, current_mtu);
+        prague.ignore_ecn_until_loss = config.ignore_ecn_until_loss || self.ignore_ecn_until_loss;
         if let Some(initial_window) = config.initial_window {
             prague.set_window(initial_window);
         }
