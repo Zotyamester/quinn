@@ -201,15 +201,17 @@ pub async fn run(opt: Opt) -> Result<()> {
     };
 
     tokio::select! {
-        _ = drive_fut => {}
-        _ = stats_fut => {}
+        _ = drive_fut => {
+            connection.close(0u32.into(), b"finished");
+        }
+        _ = stats_fut => {
+            connection.close(0u32.into(), b"time is up");
+        }
         _ = tokio::signal::ctrl_c() => {
             info!("shutting down");
             connection.close(0u32.into(), b"interrupted");
         }
     }
-
-    endpoint.wait_idle().await;
 
     #[cfg(feature = "json-output")]
     if let Some(path) = opt.json {
