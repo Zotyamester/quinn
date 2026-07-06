@@ -162,7 +162,11 @@ impl Controller for Prague {
                     self.controller.set_ssthresh(undone_cwnd);
                 }
             }
-            self.last_ecn_reduction = None; // Do not try to compensate for additional losses that may occur
+
+            // Arm the ECN cooldown from this loss event, instead of clearing it, so that a CE mark
+            // arriving shortly after this loss does not trigger a second, independent
+            // multiplicative decrease on top of the one we are about to apply below.
+            self.last_ecn_reduction = Some((now, 0));
 
             // Delegate loss handling to the underlying controller.
             self.controller.on_congestion_event(
