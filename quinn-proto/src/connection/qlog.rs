@@ -234,6 +234,37 @@ impl QlogSink {
         }
     }
 
+    pub(crate) fn emit_l4s_event(
+        &self,
+        alpha: f64,
+        now: Instant,
+        orig_rem_cid: ConnectionId,
+    ) {
+        #[cfg(feature = "qlog")]
+        {
+            use qlog::events::quic::{CongestionStateUpdated, CongestionStateUpdatedTrigger};
+
+            let Some(stream) = self.stream.as_ref() else {
+                return;
+            };
+
+            let event = CongestionStateUpdated {
+                old: None,
+                new: format!(
+                    "ALPHA:alpha={:?}",
+                    alpha
+                ),
+                trigger: Some(CongestionStateUpdatedTrigger::Ecn),
+            };
+
+            stream.emit_event(
+                orig_rem_cid,
+                EventData::QuicCongestionStateUpdated(event),
+                now,
+            );
+        }
+    }
+
     pub(super) fn emit_ecn_state_update(
         &self,
         ecn_capable: bool,

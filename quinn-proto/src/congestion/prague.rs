@@ -3,13 +3,14 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use super::{Controller, ControllerFactory, BASE_DATAGRAM_SIZE};
-use crate::Instant;
+use crate::{ConnectionId, Instant};
 use crate::congestion::{NewReno, NewRenoConfig};
 use crate::connection::RttEstimator;
+use crate::connection::qlog::QlogSink;
 use crate::frame::EcnCounts;
 
 /// A port of the Prague congestion controller to Quinn
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Prague {
     controller: NewReno,
     ect1_enabled: bool,
@@ -22,6 +23,7 @@ pub struct Prague {
     reduce_rtt_dependence: bool,
     connection_start_time: Instant,
     pub(crate) ignore_ecn_until_loss: bool,
+    pub(crate) qlog_sink: QlogSink,
     pub(crate) has_seen_loss: bool,
 }
 
@@ -48,6 +50,7 @@ impl Prague {
             last_ecn_reduction: None,
             reduce_rtt_dependence: false,
             connection_start_time: now,
+            qlog_sink: QlogSink::default(),
             ignore_ecn_until_loss: config.ignore_ecn_until_loss,
             has_seen_loss: false,
         }
@@ -116,6 +119,8 @@ impl Controller for Prague {
             if now.saturating_duration_since(self.last_alpha_update) > self.rtt_virt {
                 let frac: f64 = self.ce_count / (self.ce_count + self.ect_count);
                 self.alpha = Some((1.0 - Prague::EWMA_GAIN) * alpha + Prague::EWMA_GAIN * frac);
+                // Emit a log for debugging purposes.
+                self.qlog_sink.emit_l4s_event(self.alpha.unwrap(), now,  ConnectionId::new(&[]));
                 self.last_alpha_update = now;
                 self.ect_count = 0.0;
                 self.ce_count = 0.0;
@@ -123,6 +128,8 @@ impl Controller for Prague {
         } else if increment.ce > 0 {
             // Initialize alpha to 1.0 on the first CE mark, per the Prague spec.
             self.alpha = Some(1.0);
+            // Emit a log for debugging purposes.
+            self.qlog_sink.emit_l4s_event(self.alpha.unwrap(), now,  ConnectionId::new(&[]));
             self.last_alpha_update = now;
             self.ect_count = increment.ect1 as f64;
             self.ce_count = increment.ce as f64;
@@ -321,6 +328,7 @@ impl ControllerFactory for PragueConfig {
     ) -> Box<dyn Controller> {
         let mut prague = Prague::new(self.clone(), now, current_mtu);
         prague.ignore_ecn_until_loss = config.ignore_ecn_until_loss || self.ignore_ecn_until_loss;
+        prague.qlog_sink = config.qlog_sink.clone();
         if let Some(initial_window) = config.initial_window {
             prague.set_window(initial_window);
         }
