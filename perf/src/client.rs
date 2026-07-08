@@ -325,16 +325,12 @@ async fn request(
 
     let send_stream_stats = stream_stats.new_sender(&send, upload_size); // StreamStats::request_size is derived from the value provided here
 
-    static DATA: [u8; 1024 * 1024] = [42; 1024 * 1024];
+    let data = vec![42; upload_size as usize];
+    send.write_all(&data).await?;
 
-    // Send `DATA` to server chunk-by-chunk and record specific stats in the meantime.
-    for chunk in DATA.chunks(upload_size as usize) {
-        send.write_chunk(Bytes::from_static(chunk))
-            .await
-            .context("sending response")?;
-        let path_stats = send.path_stats();
-        send_stream_stats.on_bytes(chunk.len(), path_stats.rtt, path_stats.rttvar);
-    }
+    let path_stats = send.path_stats();
+    send_stream_stats.on_bytes(data.len(), path_stats.rtt, path_stats.rttvar);
+
     send.finish().unwrap();
     // Wait for stream to close
     _ = send.stopped().await;
