@@ -11,7 +11,6 @@ use quinn::{
     congestion::{self, ControllerFactory},
     udp::UdpSocketState,
 };
-use quinn_proto::EcnMode;
 use rustls::crypto::ring::cipher_suite;
 use socket2::{Domain, Protocol, Socket, Type};
 use tracing::warn;
@@ -57,12 +56,12 @@ pub struct CommonOpt {
     /// Ack Frequency mode
     #[clap(long = "ack-frequency")]
     pub ack_frequency: bool,
-    /// Configure the use of ECN administratively
+    /// ECN mode to use
     ///
-    /// Note, that this does not guarantee that if ECN will actually be used as it is dependent
-    /// on whether the path and the peer support it.
+    /// NOTE: this does not guarantee that ECN will actually be used, as it also depends on
+    /// support from the network path (e.g., network queues in routers) and the remote peer.
     #[clap(long = "ecn", default_value = "classic")]
-    pub ecn: Ecn,
+    pub ecn: EcnMode,
     /// Congestion algorithm to use
     #[clap(long = "congestion")]
     pub cong_alg: Option<CongestionAlgorithm>,
@@ -227,22 +226,24 @@ pub fn parse_byte_size(s: &str) -> Result<u64, ParseIntError> {
     Ok(u64::from_str(s)? * multiplier)
 }
 
-// TODO: it doesn't feel nice to do such a boilerplate mess, especially considering how simple this
-// enum is, but at the same time I felt like adding a trait from clap to a library crate would have
-// been unwise (see separation of concerns)
+/// Mode of operation for Explicit Congestion Notification (ECN)
+///
+/// NOTE: all this boilerplate-like code is here to avoid adding a trait
+/// from clap (a library crate for CLI applications -- binary crates) to a
+/// library crate.
 #[derive(Clone, Copy, ValueEnum)]
-pub enum Ecn {
+pub enum EcnMode {
     Disabled,
     Classic,
     L4S,
 }
 
-impl Into<EcnMode> for Ecn {
-    fn into(self) -> EcnMode {
+impl Into<quinn_proto::EcnMode> for EcnMode {
+    fn into(self) -> quinn_proto::EcnMode {
         match self {
-            Ecn::Disabled => EcnMode::Disabled,
-            Ecn::Classic => EcnMode::Classic,
-            Ecn::L4S => EcnMode::L4S,
+            EcnMode::Disabled => quinn_proto::EcnMode::Disabled,
+            EcnMode::Classic => quinn_proto::EcnMode::Classic,
+            EcnMode::L4S => quinn_proto::EcnMode::L4S,
         }
     }
 }

@@ -13,7 +13,10 @@ use crate::{
     connection::qlog::QlogSink,
 };
 
-/// Administrative mode of Explicit Congestion Notification (ECN)
+/// Mode of operation for Explicit Congestion Notification (ECN)
+///
+/// Determines how ECN is used (if at all) for outgoing packets, and how it is interpreted for
+/// incoming packets. 
 #[derive(Clone, Copy, Debug)]
 pub enum EcnMode {
     /// Disable ECN completely
@@ -29,7 +32,7 @@ pub enum EcnMode {
 }
 
 impl EcnMode {
-    /// Returns whether the ECN mode indicates an enabled setting (ECT(0) or ECT(1)).
+    /// Returns whether the ECN mode indicates an enabled configuration state (ECT(0) or ECT(1)).
     pub fn is_enabled(&self) -> bool {
         match self {
             EcnMode::Disabled => false,
@@ -37,17 +40,21 @@ impl EcnMode {
         }
     }
 
-    /// Returns the ECN mode consistent with the CC
+    /// Returns the appropriate ECN mode for the given congestion control algorithm.
     pub fn supported_mode(&self, controller: &mut Box<dyn Controller>) -> Self {
         match self {
             EcnMode::Classic if controller.enable_ect0() => EcnMode::Classic,
+
+            // For L4S, the check for ECT(1) takes priority, and only when it's not
+            // supported by the controller, will it fall back to ECT(0) if supported.
             EcnMode::L4S if controller.enable_ect1() => EcnMode::L4S,
             EcnMode::L4S if controller.enable_ect0() => EcnMode::Classic,
+
             _ => EcnMode::Disabled,
         }
     }
 
-    /// The corresponding ECN codepoint if ECN is enabled, `None` otherwise
+    /// Maps the ECN mode to the corresponding ECN codepoint if enabled, `None` otherwise.
     pub fn codepoint(&self) -> Option<EcnCodepoint> {
         match self {
             EcnMode::Disabled => None,

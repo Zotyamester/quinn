@@ -18,11 +18,15 @@ use qlog::events::{ExData, quic::RecoveryMetricsUpdated};
 pub(super) struct PathData {
     pub(super) remote: SocketAddr,
     pub(super) rtt: RttEstimator,
-    /// Administrative ECN mode
+    /// Configured ECN mode
+    ///
+    /// NOTE: this is a configuration value, not an operational status. It indicates what the user
+    /// wants to do, not what the path is actually doing.
     pub(super) ecn_mode: EcnMode,
-    /// Whether we're marking outgoing packets with ECT and checking received ECN counts; NOTE:
-    /// this is supposed to be an operational status, a simple bool flag indicating if ECN is
-    /// enabled on this path
+    /// Whether we're actually marking outgoing packets with ECT and checking received ECN counts;
+    ///
+    /// NOTE: this is an operational status, a simple bool flag indicating if ECN is enabled on
+    /// this path
     pub(super) using_ecn: bool,
     /// Congestion controller state
     pub(super) congestion: Box<dyn congestion::Controller>,
@@ -124,12 +128,11 @@ impl PathData {
         now: Instant,
     ) -> Self {
         let congestion = prev.congestion.clone_box();
-        let smoothed_rtt = prev.rtt.get();
         Self {
             remote,
             rtt: prev.rtt,
             pacing: Pacer::new(
-                smoothed_rtt,
+                prev.rtt.get(),
                 congestion.window(),
                 prev.current_mtu(),
                 congestion.pacing_gain(),
@@ -137,6 +140,9 @@ impl PathData {
                 now,
             ),
             ecn_mode: prev.ecn_mode,
+            // Note that we can't rely on the previous path's `using_ecn` value here, as it may
+            // have been disabled due to ECN failure. We should re-enable it on the new path should
+            // the configuration allow it.
             using_ecn: prev.ecn_mode.is_enabled(),
             congestion,
             challenge: None,
