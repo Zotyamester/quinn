@@ -267,6 +267,12 @@ impl Controller for Prague {
         self.controller.initial_window()
     }
 
+    //fn pacing_gain(&self) -> f64 {
+    //    // Don't allow excessive pacing rate, as recommended by the Prague draft
+    //    // <https://datatracker.ietf.org/doc/html/draft-briscoe-iccrg-prague-congestion-control-04#name-packet-pacing>
+    //    1.0
+    //}
+
     fn enable_ect0(&mut self) -> bool {
         self.controller.enable_ect0()
     }

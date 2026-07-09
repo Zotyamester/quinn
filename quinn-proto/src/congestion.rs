@@ -110,6 +110,13 @@ pub trait Controller: Send + Sync {
     /// Initial congestion window
     fn initial_window(&self) -> u64;
 
+    /// Pacing gain required by the controller
+    ///
+    /// Defaults to the recommended value in RFC 9002 <https://datatracker.ietf.org/doc/html/rfc9002#name-pacing>
+    fn pacing_gain(&self) -> f64 {
+        1.25
+    }
+
     /// Assures the controller that using ECT(0) is supported and enabled by the endpoint.
     /// Returns whether the controller supports and agrees to handle ECT(0) packets accordingly.
     fn enable_ect0(&mut self) -> bool {
